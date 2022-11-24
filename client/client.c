@@ -9,7 +9,6 @@
 #include <netdb.h>
 
 #define servidor "tejo.ist.utl.pt"
-#define port "58011"
 
 #define START "start"
 #define PLAY "play"
@@ -19,39 +18,56 @@
 #define STATE "state"
 #define QUIT "quit"
 #define EXIT "exit"
+#define DEFAULT_PORT 58011 // must be 58000 + Group Number but it isnt defined yet so using default for now
+#define GN "GN" // group number
 
 #define SNG "SNG "
 #define QUT "QUT\n"
 
-int main(int argc, char *argv[])
-{
-    int fd, errcode;
-    ssize_t n;
-    socklen_t addrlen;
-    struct addrinfo hints, *res;
-    char buffer[128];
-    char command[20];
-    scanf(stdin, "%s", command);
+char ip[16];
+char port[6];
 
-    // get gsip and gsport
+void parse_args(char *argv[]){
+        if (length(argv) == 1){
+        strcpy(port, DEFAULT_PORT);
+        // get ip of current machine
+        strcpy(ip, get_ip());
+    }
 
-    while (strcmp(command, EXIT) != 0){
-        
-        if (strcmp(command, PLAY) == 0){
-            start_function();
+    else if (length(argv) == 3){
+        if (strcmp(argv[2], "-n") == 0){
+            strcpy(ip, argv[3]);
+            strcpy(port, DEFAULT_PORT);
         }
 
-        else if (strcmp(command, QUIT) == 0){
-            quit_function();
+        else if (strcmp(argv[2], "-p") == 0){
+            strcpy(port, argv[3]);
+            strcpy(ip, get_ip());
         }
 
         else{
-            printf("Invalid command\n");
+            printf("Invalid arguments");
+            exit(1);
         }
-        scanf(stdin, "%s", command);
     }
-    quit_function();
-    return 0;
+
+    else if (length(argv) == 5){
+        if (strcmp(argv[2], "-n") == 0 && strcmp(argv[4], "-p") == 0){
+            strcpy(ip, argv[3]);
+            strcpy(port, argv[5]);
+        }
+
+        else{
+            printf("Invalid arguments");
+            exit(1);
+        }
+    }
+
+    else{
+        printf("Invalid arguments");
+        exit(1);
+    }
+
 }
 
 void start_function(){
@@ -113,4 +129,35 @@ void message_udp(char *buffer){
 
     freeaddrinfo(res);
     close(fd);
+}
+
+int main(int argc, char *argv[])
+{
+    int fd, errcode;
+    ssize_t n;
+    socklen_t addrlen;
+    struct addrinfo hints, *res;
+    char buffer[128];
+    char command[20];
+    scanf(stdin, "%s", command);
+
+    parse_args(argv);
+
+    while (strcmp(command, EXIT) != 0){
+        
+        if (strcmp(command, PLAY) == 0){
+            start_function();
+        }
+
+        else if (strcmp(command, QUIT) == 0){
+            quit_function();
+        }
+
+        else{
+            printf("Invalid command\n");
+        }
+        scanf(stdin, "%s", command);
+    }
+    quit_function();
+    return 0;
 }
