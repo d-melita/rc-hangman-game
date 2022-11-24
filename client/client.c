@@ -20,6 +20,9 @@
 #define QUIT "quit"
 #define EXIT "exit"
 
+#define SNG "SNG "
+#define QUT "QUT\n"
+
 int main(int argc, char *argv[])
 {
     int fd, errcode;
@@ -47,6 +50,7 @@ int main(int argc, char *argv[])
         }
         scanf(stdin, "%s", command);
     }
+    quit_function();
     return 0;
 }
 
@@ -54,7 +58,7 @@ void start_function(){
     char plid[6];
     char message[12];
     scanf(stdin, "%s", plid);
-    strcpy(message, "SNG ");
+    strcpy(message, " ");
     strcat(message, plid);
     strcat(message, "\n");
     message_udp(message);
@@ -62,7 +66,7 @@ void start_function(){
 
 void quit_function(){
     char message[5];
-    strcpy(message, "QUT\n");
+    strcpy(message, QUT);
     message_udp(message);
 }
 
