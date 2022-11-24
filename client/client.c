@@ -18,7 +18,7 @@
 #define STATE "state"
 #define QUIT "quit"
 #define EXIT "exit"
-#define DEFAULT_PORT 58011 // must be 58000 + Group Number but it isnt defined yet so using default for now
+#define DEFAULT_PORT "58011" // must be 58000 + Group Number but it isnt defined yet so using default for now
 #define GN "GN" // group number
 
 #define SNG "SNG "
@@ -27,22 +27,45 @@
 char ip[16];
 char port[6];
 
-void parse_args(char *argv[]){
-        if (length(argv) == 1){
+void message_udp(char *buffer);
+
+//get the ip of current machine when -n not specified
+void get_ip() {
+    char host[256];
+    char *ipbuff;
+    struct hostent *hent;
+    int hostname;
+
+    hostname = gethostname(host, sizeof(host));
+    if (hostname == -1) {
+        perror("error getting hostname");
+        exit(1);
+    }
+    hent = gethostbyname(host);
+    if (hent == NULL) {
+        perror("error getting host by name");
+        exit(1);
+    }
+    ipbuff = inet_ntoa(*((struct in_addr *) hent->h_addr_list[0]));
+    strcpy(ip, ipbuff);
+}
+
+void parse_args(int argc, char *argv[]){
+        if (argc == 1){
         strcpy(port, DEFAULT_PORT);
         // get ip of current machine
-        strcpy(ip, get_ip());
+        get_ip();
     }
 
-    else if (length(argv) == 3){
-        if (strcmp(argv[2], "-n") == 0){
-            strcpy(ip, argv[3]);
+    else if (argc == 3){
+        if (strcmp(argv[1], "-n") == 0){
+            strcpy(ip, argv[2]);
             strcpy(port, DEFAULT_PORT);
         }
 
-        else if (strcmp(argv[2], "-p") == 0){
-            strcpy(port, argv[3]);
-            strcpy(ip, get_ip());
+        else if (strcmp(argv[1], "-p") == 0){
+            strcpy(port, argv[2]);
+            get_ip();
         }
 
         else{
@@ -51,10 +74,10 @@ void parse_args(char *argv[]){
         }
     }
 
-    else if (length(argv) == 5){
-        if (strcmp(argv[2], "-n") == 0 && strcmp(argv[4], "-p") == 0){
-            strcpy(ip, argv[3]);
-            strcpy(port, argv[5]);
+    else if (argc == 5){
+        if (strcmp(argv[1], "-n") == 0 && strcmp(argv[3], "-p") == 0){
+            strcpy(ip, argv[2]);
+            strcpy(port, argv[4]);
         }
 
         else{
@@ -70,15 +93,18 @@ void parse_args(char *argv[]){
 
 }
 
+
 void start_function(){
-    char plid[6];
+    char plid[7];
     char message[12];
-    scanf(stdin, "%s", plid);
-    strcpy(message, " ");
+    scanf("%s", plid);
+
+    strcpy(message, SNG); // SNG 364589\n
     strcat(message, plid);
     strcat(message, "\n");
     message_udp(message);
 }
+
 
 void quit_function(){
     char message[5];
@@ -131,17 +157,14 @@ void message_udp(char *buffer){
     close(fd);
 }
 
-int main(int argc, char *argv[])
-{
-    int fd, errcode;
-    ssize_t n;
-    socklen_t addrlen;
-    struct addrinfo hints, *res;
-    char buffer[128];
-    char command[20];
-    scanf(stdin, "%s", command);
 
-    parse_args(argv);
+int main(int argc, char *argv[])
+{   
+    
+    char command[20];
+    scanf("%s", command);
+
+    parse_args(argc, argv);
 
     while (strcmp(command, EXIT) != 0){
         
@@ -156,7 +179,7 @@ int main(int argc, char *argv[])
         else{
             printf("Invalid command\n");
         }
-        scanf(stdin, "%s", command);
+        scanf("%s", command);
     }
     quit_function();
     return 0;
