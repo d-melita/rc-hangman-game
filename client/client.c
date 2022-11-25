@@ -11,6 +11,7 @@
 #define servidor "tejo.ist.utl.pt"
 
 #define START "start"
+#define SG "sg"
 #define PLAY "play"
 #define GUESS "guess"
 #define SCOREBOARD "scoreboard"
@@ -22,12 +23,11 @@
 #define GN "GN" // group number
 
 #define SNG "SNG "
-#define QUT "QUT\n"
-
-#define IP_SUFIX ".ist.utl.pt"
+#define QUT "QUT "
 
 char ip[16];
 char port[6];
+char plid[7];
 
 void message_udp(char *buffer);
 
@@ -77,6 +77,22 @@ void get_ip_know_host(char *host){
     }
 }
 
+void check_ip(char *ip_arg){
+    char *aux;
+    char *copy = strdup(ip_arg);
+    aux = strtok(copy, ".");
+    while (aux != NULL) {
+        // check if aux is a number between 0 and 255 (atoi) but since it is a string we also need to check if each char is a number
+        if (atoi(aux) > 255 || atoi(aux) < 0 || aux[0] < '0' || aux[0] > '9' || aux[1] < '0' 
+            || aux[1] > '9' || aux[2] < '0' || aux[2] > '9' || aux[3] < '0' || aux[3] > '9') {
+            get_ip_know_host(ip_arg);
+            return;
+        }
+        aux = strtok(NULL, ".");
+    }
+    strcpy(ip, ip_arg);
+}
+
 void parse_args(int argc, char *argv[]){
     // we have 4 cases: empty; -n host; -p port; -n host -p port
         if (argc == 1){
@@ -86,9 +102,7 @@ void parse_args(int argc, char *argv[]){
 
     else if (argc == 3){
         if (strcmp(argv[1], "-n") == 0){
-            char *host = strtok(argv[2], ".");
-            strcat(host, IP_SUFIX);
-            get_ip_know_host(host); //get ip of host
+            check_ip(argv[2]);
             strcpy(port, DEFAULT_PORT);
         }
 
@@ -105,9 +119,7 @@ void parse_args(int argc, char *argv[]){
 
     else if (argc == 5){
         if (strcmp(argv[1], "-n") == 0 && strcmp(argv[3], "-p") == 0){
-            char *host = strtok(argv[2], ".");
-            strcat(host, IP_SUFIX);
-            get_ip_know_host(host);
+            check_ip(argv[2]);
             strcpy(port, argv[4]);
         }
 
@@ -126,7 +138,6 @@ void parse_args(int argc, char *argv[]){
 
 
 void start_function(){
-    char plid[7];
     char message[12];
     scanf("%s", plid);
 
@@ -138,8 +149,10 @@ void start_function(){
 
 
 void quit_function(){
-    char message[5];
+    char message[12];
     strcpy(message, QUT);
+    strcat(message, plid);
+    strcat(message, "\n");
     message_udp(message);
 }
 
@@ -183,7 +196,6 @@ void message_udp(char *buffer){
 
     write(1, "Received: ", 10);
     write(1, response, n);
-
     freeaddrinfo(res);
     close(fd);
 }
@@ -198,7 +210,7 @@ int main(int argc, char *argv[])
 
     while (strcmp(command, EXIT) != 0){
         
-        if (strcmp(command, PLAY) == 0){
+        if (strcmp(command, START) == 0 || strcmp(command, SG) == 0){
             start_function();
         }
 
