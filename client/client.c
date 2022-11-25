@@ -13,7 +13,9 @@
 #define START "start"
 #define SG "sg"
 #define PLAY "play"
+#define PL "pl"
 #define GUESS "guess"
+#define GW "gw"
 #define SCOREBOARD "scoreboard"
 #define HINT "hint"
 #define STATE "state"
@@ -22,12 +24,14 @@
 #define DEFAULT_PORT "58011" // must be 58000 + Group Number but it isnt defined yet so using default for now
 #define GN "GN" // group number
 
-#define SNG "SNG "
-#define QUT "QUT "
+#define SNG "SNG"
+#define QUT "QUT"
+#define PLG "PLG"
 
 char ip[16];
 char port[6];
 char plid[7];
+int trial = 1;
 
 void message_udp(char *buffer);
 
@@ -141,18 +145,44 @@ void start_function(){
     char message[12];
     scanf("%s", plid);
 
-    strcpy(message, SNG); // SNG 364589\n
-    strcat(message, plid);
-    strcat(message, "\n");
+    sprintf(message, "%s %s\n", SNG, plid);
     message_udp(message);
+    trial = 1;
 }
 
+void play_function(){
+    char *message;
+    char trial_str[10];
+    sprintf(trial_str, "%d", trial);
+    message = malloc(13 + strlen(trial_str));
+    char letter[2];
 
+    scanf("%s", letter);
+
+    sprintf(message, "%s %s %s %d\n", PLG, plid, letter, trial);
+    message_udp(message);
+    trial++;
+    free(message);
+}
+
+/*
+void guess_function(){
+    char *word, *message;
+    char trial_str[10];
+    word = (char*)malloc(100*sizeof(char));
+    sprintf(trial_str, "%d", trial);
+    scanf("%s", word);
+    message = malloc(12 + strlen(word) + strlen(trial_str));
+    sprintf(message, "%s %s %s %d\n", GW, plid, word, trial);
+    message_udp(message);
+    trial++;
+    free(word);
+    free(message);
+}
+*/
 void quit_function(){
     char message[12];
-    strcpy(message, QUT);
-    strcat(message, plid);
-    strcat(message, "\n");
+    sprintf(message, "%s %s\n", QUT, plid);
     message_udp(message);
 }
 
@@ -201,8 +231,7 @@ void message_udp(char *buffer){
 }
 
 
-int main(int argc, char *argv[])
-{   
+int main(int argc, char *argv[]){   
     char command[20];
     scanf("%s", command);
 
@@ -214,12 +243,21 @@ int main(int argc, char *argv[])
             start_function();
         }
 
+        else if (strcmp(command, PLAY) == 0 || strcmp(command, PL) == 0){
+            play_function();
+        }
+
         else if (strcmp(command, QUIT) == 0){
             quit_function();
         }
 
-        else{
-            printf("Invalid command\n");
+        else if (strcmp(command, GUESS) == 0 || strcmp(command, GW) == 0){
+            guess_function();
+        }
+
+        else {
+            printf("Invalid command");
+            exit(1);
         }
         scanf("%s", command);
     }
