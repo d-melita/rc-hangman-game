@@ -24,6 +24,8 @@
 #define SNG "SNG "
 #define QUT "QUT\n"
 
+#define IP_SUFIX ".ist.utl.pt"
+
 char ip[16];
 char port[6];
 
@@ -50,16 +52,43 @@ void get_ip() {
     strcpy(ip, ipbuff);
 }
 
+// get the ip of host when -
+void get_ip_know_host(char *host){
+    struct addrinfo hints, *res, *p;
+    int errcode;
+    char buffer[INET_ADDRSTRLEN];
+    struct in_addr *addr;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_CANONNAME;
+
+    if ((errcode = getaddrinfo(host, NULL, &hints, &res)) != 0) {
+        fprintf(stderr, "error: gettaddrinfo: %s\n", gai_strerror(errcode));
+    }
+    else {
+        for (p = res; p != NULL; p = p->ai_next){
+            addr = &((struct sockaddr_in *) p -> ai_addr) -> sin_addr;
+            inet_ntop(p->ai_family, addr, buffer, sizeof(buffer));
+            strcpy(ip, buffer);
+        }
+        freeaddrinfo(res);
+    }
+}
+
 void parse_args(int argc, char *argv[]){
+    // we have 4 cases: empty; -n host; -p port; -n host -p port
         if (argc == 1){
         strcpy(port, DEFAULT_PORT);
-        // get ip of current machine
-        get_ip();
+        get_ip(); // get ip of current machine
     }
 
     else if (argc == 3){
         if (strcmp(argv[1], "-n") == 0){
-            strcpy(ip, argv[2]);
+            char *host = strtok(argv[2], ".");
+            strcat(host, IP_SUFIX);
+            get_ip_know_host(host); //get ip of host
             strcpy(port, DEFAULT_PORT);
         }
 
@@ -76,7 +105,9 @@ void parse_args(int argc, char *argv[]){
 
     else if (argc == 5){
         if (strcmp(argv[1], "-n") == 0 && strcmp(argv[3], "-p") == 0){
-            strcpy(ip, argv[2]);
+            char *host = strtok(argv[2], ".");
+            strcat(host, IP_SUFIX);
+            get_ip_know_host(host);
             strcpy(port, argv[4]);
         }
 
@@ -160,7 +191,6 @@ void message_udp(char *buffer){
 
 int main(int argc, char *argv[])
 {   
-    
     char command[20];
     scanf("%s", command);
 
