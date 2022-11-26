@@ -15,10 +15,6 @@ struct current_game {
 
 struct current_game current_game;
 
-void message_udp(char *buffer);
-void set_new_game(char *message);
-void play_made(char *message);
-
 //get the ip of current machine when -n not specified
 void get_ip() {
     char host[256];
@@ -30,11 +26,11 @@ void get_ip() {
         exit(1);
     }
 
-    get_ip_know_host(host);
+    get_ip_known_host(host);
 }
 
 // get the ip of host when -n specified
-void get_ip_know_host(char *host){
+void get_ip_known_host(char *host){
     struct addrinfo hints, *res, *p;
     int errcode;
     char buffer[INET_ADDRSTRLEN];
@@ -68,7 +64,7 @@ void parse_args(int argc, char *argv[]){
 
     else if (argc == 3){ // case 2 and 3
         if (strcmp(argv[1], "-n") == 0){
-            get_ip_know_host(argv[2]);
+            get_ip_known_host(argv[2]);
             strcpy(port, DEFAULT_PORT);
         }
 
@@ -85,7 +81,7 @@ void parse_args(int argc, char *argv[]){
 
     else if (argc == 5){ // case 4
         if (strcmp(argv[1], "-n") == 0 && strcmp(argv[3], "-p") == 0){
-            get_ip_know_host(argv[2]);
+            get_ip_known_host(argv[2]);
             strcpy(port, argv[4]);
         }
 

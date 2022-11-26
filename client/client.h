@@ -81,7 +81,6 @@ void set_new_game(char *message);
 void play_made(char *message);
 void get_ip();
 void get_ip_known_host(char *host);
-void check_ip(char *ip_arg);
 void parse_args(int argc, char *argv[]);
 void parse_response(char *message);
 void set_new_game(char *message);
