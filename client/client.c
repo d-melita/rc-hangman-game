@@ -11,6 +11,7 @@ struct current_game {
     int errors;
     int max_errors;
     char last_letter[2];
+    char word_guessed[31];
 };
 
 struct current_game current_game;
@@ -119,9 +120,58 @@ void parse_response(char *message){
     else if (strcmp(code, RLG) == 0){
         if (strcmp(status, OK) == 0){
             play_made(message);
+            // increment trial
+            current_game.trial++;
         }
         else if (strcmp(status, NOK) == 0){
-            printf("Error: The word does not appear in current word\n");
+            current_game.errors++;
+            printf("Error: The letter does not appear in current word\n");
+        }
+        else if (strcmp(status, DUP) == 0){
+            printf("Error: The letter has already been proposed\n");
+        }
+
+        else if (strcmp(status, WIN) == 0){
+            win_function();
+        }
+
+        else if (strcmp(status, OVR) == 0){
+            current_game.errors++;
+            printf("Error: Wrong letter and game over\n");
+            quit_function();
+        }
+
+        else if (strcmp(status, INV) == 0){
+            printf("Error: Trial number not valid or repeating last PLG stored at the GS with different letter\n");
+        }
+
+        else if (strcmp(status, ERR) == 0){
+            printf("Error: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n");
+        }
+    }
+
+    else if (strcmp(code, RWG) == 0){
+        if (strcmp(status, NOK) == 0){
+            current_game.errors++;
+            printf("Error: The letter does not appear in current word\n");
+        }
+
+        else if (strcmp(status, WIN) == 0){
+            win_word_function();
+        }
+
+        else if (strcmp(status, OVR) == 0){
+            current_game.errors++;
+            printf("Error: Wrong word and game over\n");
+            quit_function();
+        }
+
+        else if (strcmp(status, INV) == 0){
+            printf("Error: Trial number not valid or repeating last PLG stored at the GS with different letter\n");
+        }
+
+        else if (strcmp(status, ERR) == 0){
+            printf("Error: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n");
         }
     }
 }
@@ -187,6 +237,22 @@ void play_made(char *message){
     printf("Correct Letter: %s\n", current_game.word);
 }
 
+void win_function(){
+    for (int i = 0; i < current_game.lenght; i++){
+        if (current_game.word[i] == '_'){
+            current_game.word[i] = current_game.last_letter[0];
+        }
+    }
+    printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
+    quit_function();
+}
+
+void win_word_function(){
+    strcpy(current_game.word, current_game.word_guessed);
+    printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
+    quit_function();
+}
+
 // function to send a message to the server to start a new game
 void start_function(){
     char message[12];
@@ -208,27 +274,23 @@ void play_function(){
     sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
 
     message_udp(message);
-    // increment trial
-    current_game.trial++;
     free(message);
 }
 
 // function to send a message to the server to make a guess
 void guess_function(){
-    char *word, *message;
+    char *message;
     char trial_str[10];
-    word = (char*)malloc(100*sizeof(char));
 
     sprintf(trial_str, "%d", current_game.trial);
-    scanf("%s", word);
+    scanf("%s", current_game.word_guessed);
 
-    message = malloc(12 + strlen(word) + strlen(trial_str));
+    message = malloc(12 + strlen(current_game.word_guessed) + strlen(trial_str));
 
-    sprintf(message, "%s %s %s %d\n", PWG, plid, word, current_game.trial);
+    sprintf(message, "%s %s %s %d\n", PWG, plid, current_game.word_guessed, current_game.trial);
     message_udp(message);
     current_game.trial++;
 
-    free(word);
     free(message);
 }
 

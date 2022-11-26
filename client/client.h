@@ -42,10 +42,15 @@
 #define PLG "PLG"
 #define RLG "RLG"
 #define PWG "PWG"
+#define RWG "RWG"
 
 #define OK "OK"
 #define NOK "NOK"
 #define ERR "ERR"
+#define DUP "DUP"
+#define WIN "WIN"
+#define OVR "OVR"
+#define INV "INV"
 
 // Buffer sizes
 
@@ -92,6 +97,8 @@ void guess_function();
 void quit_function();
 void exit_function();
 void message_udp(char *buffer);
+void win_function();
+void win_word_function();
 
 
 #endif
