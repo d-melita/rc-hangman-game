@@ -56,8 +56,6 @@ void play_made(char *message);
 //get the ip of current machine when -n not specified
 void get_ip() {
     char host[256];
-    char *ipbuff;
-    struct hostent *hent;
     int hostname;
 
     hostname = gethostname(host, sizeof(host));
@@ -65,13 +63,8 @@ void get_ip() {
         perror("error getting hostname");
         exit(1);
     }
-    hent = gethostbyname(host);
-    if (hent == NULL) {
-        perror("error getting host by name");
-        exit(1);
-    }
-    ipbuff = inet_ntoa(*((struct in_addr *) hent->h_addr_list[0]));
-    strcpy(ip, ipbuff);
+
+    get_ip_know_host(host);
 }
 
 // get the ip of host when -n specified
@@ -99,35 +92,17 @@ void get_ip_know_host(char *host){
     }
 }
 
-// function to check if ip provided is valid
-void check_ip(char *ip_arg){
-    char *aux;
-    char *copy = strdup(ip_arg);
-    aux = strtok(copy, ".");
-    while (aux != NULL) {
-        // check if aux is a number between 0 and 255 (atoi) but since it is a string we also need to check if each char is a number
-        if (atoi(aux) > 255 || atoi(aux) < 0 || aux[0] < '0' || aux[0] > '9' || aux[1] < '0' 
-            || aux[1] > '9' || aux[2] < '0' || aux[2] > '9' || aux[3] < '0' || aux[3] > '9') {
-            get_ip_know_host(ip_arg);
-            return;
-        }
-        aux = strtok(NULL, ".");
-    }
-    strcpy(ip, ip_arg);
-}
-
-
 //function to parse arguments (ip and port)
 void parse_args(int argc, char *argv[]){
     // we have 4 cases: empty; -n host; -p port; -n host -p port
-        if (argc == 1){
+        if (argc == 1){ // case 1
         strcpy(port, DEFAULT_PORT);
         get_ip(); // get ip of current machine
     }
 
-    else if (argc == 3){
+    else if (argc == 3){ // case 2 and 3
         if (strcmp(argv[1], "-n") == 0){
-            check_ip(argv[2]);
+            get_ip_know_host(argv[2]);
             strcpy(port, DEFAULT_PORT);
         }
 
@@ -142,9 +117,9 @@ void parse_args(int argc, char *argv[]){
         }
     }
 
-    else if (argc == 5){
+    else if (argc == 5){ // case 4
         if (strcmp(argv[1], "-n") == 0 && strcmp(argv[3], "-p") == 0){
-            check_ip(argv[2]);
+            get_ip_know_host(argv[2]);
             strcpy(port, argv[4]);
         }
 
