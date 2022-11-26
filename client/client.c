@@ -8,8 +8,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#define servidor "tejo.ist.utl.pt"
-
 #define START "start"
 #define SG "sg"
 #define PLAY "play"
@@ -25,15 +23,35 @@
 #define GN "GN" // group number
 
 #define SNG "SNG"
+#define RSG "RSG"
 #define QUT "QUT"
 #define PLG "PLG"
+#define RLG "RLG"
+#define PWG "PWG"
+
+#define OK "OK"
+#define NOK "NOK"
+#define ERR "ERR"
 
 char ip[16];
 char port[6];
 char plid[7];
 int trial = 1;
 
+struct current_game {
+    int trial;
+    char word[31];
+    int lenght;
+    int errors;
+    int max_errors;
+    char last_letter[2];
+};
+
+struct current_game current_game;
+
 void message_udp(char *buffer);
+void set_new_game(char *message);
+void play_made(char *message);
 
 //get the ip of current machine when -n not specified
 void get_ip() {
@@ -56,7 +74,7 @@ void get_ip() {
     strcpy(ip, ipbuff);
 }
 
-// get the ip of host when -
+// get the ip of host when -n specified
 void get_ip_know_host(char *host){
     struct addrinfo hints, *res, *p;
     int errcode;
@@ -81,6 +99,7 @@ void get_ip_know_host(char *host){
     }
 }
 
+// function to check if ip provided is valid
 void check_ip(char *ip_arg){
     char *aux;
     char *copy = strdup(ip_arg);
@@ -97,6 +116,8 @@ void check_ip(char *ip_arg){
     strcpy(ip, ip_arg);
 }
 
+
+//function to parse arguments (ip and port)
 void parse_args(int argc, char *argv[]){
     // we have 4 cases: empty; -n host; -p port; -n host -p port
         if (argc == 1){
@@ -140,46 +161,141 @@ void parse_args(int argc, char *argv[]){
 
 }
 
+//function to parse server response
+void parse_response(char *message){
+    char code[4];
+    char status[4];
+    char *word;
 
+    // scan the message and get the code and status
+    sscanf(message, "%s %s", code, status);
+
+    if (strcmp(code, RSG) == 0){
+        if (strcmp(status, OK) == 0){
+            set_new_game(message);
+        }
+        else if (strcmp(status, NOK) == 0){
+            printf("Error: game already started\n");
+        }
+    }
+
+    else if (strcmp(code, RLG) == 0){
+        if (strcmp(status, OK) == 0){
+            play_made(message);
+        }
+        else if (strcmp(status, NOK) == 0){
+            printf("Error: The word does not appear in current word\n");
+        }
+    }
+}
+
+// function to set a new game
+void set_new_game(char *message){
+    char code[4];
+    char status[4];
+    char *word; // word only containing _ _ _ _ _ (because we dont know the lenght of the word)
+    sscanf(message, "%s %s %d %d", code, status, 
+    &current_game.lenght, &current_game.max_errors);
+    word = (char*) malloc(current_game.lenght * sizeof(char));
+    for (int i = 0; i < current_game.lenght; i++){
+        word[i] = '_';
+    }
+    // set new game components
+    strcpy(current_game.word, word);
+    current_game.errors = 0;
+    current_game.trial = 1;
+    strcpy(current_game.last_letter, "");
+    printf("New game started (max %d errors): %s (word lenght: %d)\n", 
+    current_game.max_errors, current_game.word, current_game.lenght);
+}
+
+// function to know which positions to change in the word
+void parse_message_play(char *message, char pos[]){
+    char c;
+    int ne = 0; // nb of white spaces
+    int i = 0;
+    int j, index = 0;
+    for (i; i<strlen(message); i++){
+        if (message[i] == ' '){
+            ne++;
+        }
+        if (ne == 4) { // i know i will have exactly 4 spaces before the positions
+            break;
+        }
+    }
+    for (j = i; j < strlen(message); j++){
+        if (message[j] != ' '){
+            pos[index] = message[j];
+            index++;
+        }
+    }
+
+}
+
+//function to show the play made
+void play_made(char *message){
+    int n; // number of positions where the letter appears
+    char code[4];
+    char status[4];
+
+    sscanf(message, "%s %s %d %d", code, status, &current_game.trial, &n);
+    char pos[n];
+
+    parse_message_play(message, pos);
+
+    for (int i = 0; i < n; i++){
+        int index = pos[i] - '0';
+        current_game.word[index-1] = current_game.last_letter[0];
+    }
+    printf("Correct Letter: %s\n", current_game.word);
+}
+
+// function to send a message to the server to start a new game
 void start_function(){
     char message[12];
     scanf("%s", plid);
-
     sprintf(message, "%s %s\n", SNG, plid);
     message_udp(message);
-    trial = 1;
 }
 
+// function to send a message to the server to make a play
 void play_function(){
     char *message;
     char trial_str[10];
-    sprintf(trial_str, "%d", trial);
+    int trial = current_game.trial;
+
+    sprintf(trial_str, "%d", current_game.trial);
     message = malloc(13 + strlen(trial_str));
-    char letter[2];
 
-    scanf("%s", letter);
+    scanf("%s", current_game.last_letter);
+    sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
 
-    sprintf(message, "%s %s %s %d\n", PLG, plid, letter, trial);
     message_udp(message);
-    trial++;
+    // increment trial
+    current_game.trial++;
     free(message);
 }
 
-/*
+// function to send a message to the server to make a guess
 void guess_function(){
     char *word, *message;
     char trial_str[10];
     word = (char*)malloc(100*sizeof(char));
+
     sprintf(trial_str, "%d", trial);
     scanf("%s", word);
+
     message = malloc(12 + strlen(word) + strlen(trial_str));
-    sprintf(message, "%s %s %s %d\n", GW, plid, word, trial);
+
+    sprintf(message, "%s %s %s %d\n", PWG, plid, word, trial);
     message_udp(message);
     trial++;
+
     free(word);
     free(message);
 }
-*/
+
+// function to send a message to the server to quit the game
 void quit_function(){
     char message[12];
     sprintf(message, "%s %s\n", QUT, plid);
@@ -204,7 +320,7 @@ void message_udp(char *buffer){
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
 
-    errcode = getaddrinfo(servidor, port, &hints, &res);
+    errcode = getaddrinfo(ip, port, &hints, &res);
     if (errcode != 0){
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
         exit(1);
@@ -224,8 +340,10 @@ void message_udp(char *buffer){
         exit(1);
     }
 
-    write(1, "Received: ", 10);
     write(1, response, n);
+    response[n] = '\0';
+    parse_response(response);
+
     freeaddrinfo(res);
     close(fd);
 }
@@ -256,11 +374,17 @@ int main(int argc, char *argv[]){
         }
 
         else {
-            printf("Invalid command");
-            exit(1);
+            printf("Invalid command\n");
         }
         scanf("%s", command);
     }
     quit_function();
     return 0;
 }
+
+/*
+TO DO:
+EXIT - verificar se está um jogo em curso ou não antes de fechar e se estiver terminá-lo
+acabar a parte da PLG com os diferentes status
+continuar
+*/
