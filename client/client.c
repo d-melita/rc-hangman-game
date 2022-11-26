@@ -36,7 +36,6 @@
 char ip[16];
 char port[6];
 char plid[7];
-int trial = 1;
 
 struct current_game {
     int trial;
