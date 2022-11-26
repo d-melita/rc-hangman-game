@@ -1,37 +1,4 @@
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-
-#define START "start"
-#define SG "sg"
-#define PLAY "play"
-#define PL "pl"
-#define GUESS "guess"
-#define GW "gw"
-#define SCOREBOARD "scoreboard"
-#define HINT "hint"
-#define STATE "state"
-#define QUIT "quit"
-#define EXIT "exit"
-#define DEFAULT_PORT "58011" // must be 58000 + Group Number but it isnt defined yet so using default for now
-#define GN "GN" // group number
-
-#define SNG "SNG"
-#define RSG "RSG"
-#define QUT "QUT"
-#define PLG "PLG"
-#define RLG "RLG"
-#define PWG "PWG"
-
-#define OK "OK"
-#define NOK "NOK"
-#define ERR "ERR"
+#include "client.h"
 
 char ip[16];
 char port[6];
@@ -256,14 +223,14 @@ void guess_function(){
     char trial_str[10];
     word = (char*)malloc(100*sizeof(char));
 
-    sprintf(trial_str, "%d", trial);
+    sprintf(trial_str, "%d", current_game.trial);
     scanf("%s", word);
 
     message = malloc(12 + strlen(word) + strlen(trial_str));
 
-    sprintf(message, "%s %s %s %d\n", PWG, plid, word, trial);
+    sprintf(message, "%s %s %s %d\n", PWG, plid, word, current_game.trial);
     message_udp(message);
-    trial++;
+    current_game.trial++;
 
     free(word);
     free(message);
