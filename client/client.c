@@ -100,7 +100,7 @@ void parse_args(int argc, char *argv[]){
 }
 
 //function to parse server response
-void parse_response(char *message){
+void parse_response_udp(char *message){
     char code[4];
     char status[4];
     char *word;
@@ -174,6 +174,31 @@ void parse_response(char *message){
             printf("Error: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n");
         }
     }
+
+    else if (strcmp(code, RQT) == 0){
+        if (strcmp(status, OK) == 0){
+            printf("Game over\n");
+        }
+        else if (strcmp(status, ERR) == 0){
+            printf("Error: There's no ongoing game for the specified player PLID\n");
+        }
+    }
+
+    else if (strcmp(code, RVV) == 0){
+        printf("%s\n", status); // only using during devolopment to dispaly the word to bue guessed
+
+        // only when server finished
+        /*
+        if (strcmp(status, OK) == 0){
+            quit_function();
+        }
+
+        else if (strcmp(status, ERR) == 0){
+            printf("Error: There's no ongoing game for the specified player PLID\n");
+        }
+        */
+    }
+    
 }
 
 // function to set a new game
@@ -341,7 +366,7 @@ void message_udp(char *buffer){
 
     write(1, response, n);
     response[n] = '\0';
-    parse_response(response);
+    parse_response_udp(response);
 
     freeaddrinfo(res);
     close(fd);

@@ -43,6 +43,9 @@
 #define RLG "RLG"
 #define PWG "PWG"
 #define RWG "RWG"
+#define RQT "RQT"
+#define REV "REV"
+#define RVV "RVV"
 
 #define OK "OK"
 #define NOK "NOK"
@@ -87,7 +90,7 @@ void play_made(char *message);
 void get_ip();
 void get_ip_known_host(char *host);
 void parse_args(int argc, char *argv[]);
-void parse_response(char *message);
+void parse_response_udp(char *message);
 void set_new_game(char *message);
 void parse_message_play(char *message, char pos[]);
 void play_made(char *message);
