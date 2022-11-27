@@ -135,10 +135,12 @@ void parse_response_udp(char *message){
 
         else if (strcmp(status, WIN) == 0){
             win_function();
+            game_ongoing = 0;
         }
 
         else if (strcmp(status, OVR) == 0){
             current_game.errors++;
+            game_ongoing = 0;
             printf("Error: Wrong letter and game over\n");
         }
 
@@ -160,10 +162,12 @@ void parse_response_udp(char *message){
 
         else if (strcmp(status, WIN) == 0){
             win_word_function();
+            game_ongoing = 0;
         }
 
         else if (strcmp(status, OVR) == 0){
             current_game.errors++;
+            game_ongoing = 0;
             printf("Error: Wrong word and game over\n");
         }
 
@@ -200,6 +204,83 @@ void parse_response_udp(char *message){
         */
     }
     
+    else if (strcmp(code, ERR) == 0){
+        printf("Error: unexpected protocol message received\n");
+    }
+
+    else{
+        printf("An error occurred\n");
+    }
+}
+
+void parse_response_tcp(char *message){
+    char code[4];
+    char status[4];
+
+    // scan the message and get the code and status
+    sscanf(message, "%s %s", code, status);
+
+    if (strcmp(code, RSB) == 0){
+        if (strcmp(status, OK) == 0){
+            scoreboard(message);
+        }
+
+        else if (strcmp(status, EMPTY) == 0){
+            printf("Scoreboard is empty\n");
+        }
+    }
+
+    else if (strcmp(code, RHL) == 0){
+        if (strcmp(status, OK) == 0){
+            get_hint(message);
+        }
+
+        else if ((strcmp, NOK) == 0){
+            printf("Error: There's no file to be sent or some other problem occured\n");
+        }
+    }
+
+    else if (strcmp(code, RST) == 0){
+        if (strcmp(status, ACT) == 0 || strcmp(status, FIN) == 0){
+            game_status(message); // active or last game finished
+        }
+
+        else if (strcmp(status, NOK) == 0){
+            printf("Game server did not find any games\n");
+        }
+    }
+
+    else if (strcmp(code, ERR) == 0){
+        printf("Error: unexpected protocol message received\n");
+    }
+
+    else{
+        printf("An error occurred\n");
+    }
+}
+
+void scoreboard(char *message){
+    char code[4];
+    char status[4];
+    char fname[20];
+    int fsize;
+    FILE *fdata;
+}
+
+void get_hint(char *message){
+    char code[4];
+    char status[4];
+    char fname[20];
+    int fsize;
+    FILE *fdata;
+}
+
+void game_status(char *message){
+    char code[4];
+    char status[4];
+    char fname[20];
+    int fsize;
+    FILE *fdata;
 }
 
 // function to set a new game
@@ -320,6 +401,10 @@ void guess_function(){
     free(message);
 }
 
+void scoreboard_function(){
+    message_tcp(GSB);
+}
+
 // function to send a message to the server to quit the game
 void quit_function(){
     char message[12];
@@ -374,6 +459,56 @@ void message_udp(char *buffer){
     close(fd);
 }
 
+void message_tcp(char *buffer){
+    int fd, errcode;
+    ssize_t n;
+    socklen_t addrlen;
+    struct addrinfo hints, *res;
+    struct sockaddr_in addr;
+    char response[128];
+
+    fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
+    if (fd == -1){
+        perror("socket error");
+        exit(1);
+    }
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    errcode = getaddrinfo(ip, port, &hints, &res);
+    if (errcode != 0){
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        exit(1);
+    }
+
+    n = connect(fd, res->ai_addr, res->ai_addrlen);
+    if (n == -1){
+        perror("connect error");
+        exit(1);
+    }
+
+    n = write(fd, buffer, strlen(buffer));
+    if (n == -1){
+        perror("write error");
+        exit(1);
+    }
+
+    n = read(fd, response, 128);
+    if (n == -1){
+        perror("read error");
+        exit(1);
+    }
+
+    write(1, response, n);
+    response[n] = '\0';
+    parse_response_tcp(response);
+
+    freeaddrinfo(res);
+    close(fd);
+}
+
 
 int main(int argc, char *argv[]){   
     char command[20];
@@ -397,6 +532,10 @@ int main(int argc, char *argv[]){
 
         else if (strcmp(command, GUESS) == 0 || strcmp(command, GW) == 0){
             guess_function();
+        }
+
+        else if (strcmp(command, SCOREBOARD) == 0 || strcmp(command, SB) == 0){
+            scoreboard_function();
         }
 
         else {

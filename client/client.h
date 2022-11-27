@@ -46,6 +46,12 @@
 #define RQT "RQT"
 #define REV "REV"
 #define RVV "RVV"
+#define GSB "GSB"
+#define RSB "RSB"
+#define GHL "GHL"
+#define RHL "RHL"
+#define STA "STA"
+#define RST "RST"
 
 #define OK "OK"
 #define NOK "NOK"
@@ -54,6 +60,10 @@
 #define WIN "WIN"
 #define OVR "OVR"
 #define INV "INV"
+#define ACT "ACT"
+#define FIN "FIN"
+#define EMPTY "EMPTY"
+
 
 // Buffer sizes
 
@@ -91,17 +101,22 @@ void get_ip();
 void get_ip_known_host(char *host);
 void parse_args(int argc, char *argv[]);
 void parse_response_udp(char *message);
+void parse_response_tcp(char *message);
 void set_new_game(char *message);
 void parse_message_play(char *message, char pos[]);
 void play_made(char *message);
 void start_function();
 void play_function();
 void guess_function();
+void scoreboard_function();
 void quit_function();
-void exit_function();
 void message_udp(char *buffer);
+void message_tcp(char *buffer);
 void win_function();
 void win_word_function();
+void scoreboard(char *message);
+void get_hint(char *message);
+void game_status(char *message);
 
 
 #endif
