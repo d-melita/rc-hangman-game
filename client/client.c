@@ -405,6 +405,18 @@ void scoreboard_function(){
     message_tcp(GSB);
 }
 
+void hint_function(){
+    char message[12];
+    sprintf(message, "%s %s\n", GHL, plid);
+    message_tcp(message);
+}
+
+void state_function(){
+    char message[12];
+    sprintf(message, "%s %s\n", STA, plid);
+    message_tcp(message);
+}
+
 // function to send a message to the server to quit the game
 void quit_function(){
     char message[12];
@@ -536,6 +548,14 @@ int main(int argc, char *argv[]){
 
         else if (strcmp(command, SCOREBOARD) == 0 || strcmp(command, SB) == 0){
             scoreboard_function();
+        }
+
+        else if (strcmp(command, HINT) == 0 || strcmp(command, H) == 0){
+            hint_function();
+        }
+
+        else if (strcmp(command, STATE) == 0 || strcmp(command, ST) == 0){
+            state_function();
         }
 
         else {
