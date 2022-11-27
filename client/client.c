@@ -76,7 +76,7 @@ void parse_args(int argc, char *argv[]){
         }
 
         else{
-            printf("Invalid arguments");
+            printf("Invalid arguments\n");
             exit(1);
         }
     }
@@ -88,13 +88,13 @@ void parse_args(int argc, char *argv[]){
         }
 
         else{
-            printf("Invalid arguments");
+            printf("Invalid arguments\n");
             exit(1);
         }
     }
 
     else{
-        printf("Invalid arguments");
+        printf("Invalid arguments\n");
         exit(1);
     }
 
@@ -215,7 +215,7 @@ void parse_response_udp(char *message){
 
 void parse_response_tcp(char *message){
     char code[4];
-    char status[4];
+    char status[6];
 
     // scan the message and get the code and status
     sscanf(message, "%s %s", code, status);
@@ -340,7 +340,6 @@ void play_made(char *message){
 
     for (int i = 0; i < n; i++){
         int index = pos[i] - '0';
-        printf("%d\n", index);
         current_game.word[index-1] = current_game.last_letter[0];
     }
     printf("Correct Letter: %s\n", current_game.word);
@@ -402,18 +401,23 @@ void guess_function(){
 }
 
 void scoreboard_function(){
-    message_tcp(GSB);
+    char message[5];
+    sprintf(message, "%s\n", GSB);
+    printf("%s", message);
+    message_tcp(message);
 }
 
 void hint_function(){
     char message[12];
     sprintf(message, "%s %s\n", GHL, plid);
+    printf("%s", message);
     message_tcp(message);
 }
 
 void state_function(){
     char message[12];
     sprintf(message, "%s %s\n", STA, plid);
+    printf("%s", message);
     message_tcp(message);
 }
 
@@ -464,8 +468,8 @@ void message_udp(char *buffer){
     }
 
     write(1, response, n);
-    response[n] = '\0';
-    parse_response_udp(response);
+    //response[n] = '\0';
+    //parse_response_udp(response);
 
     freeaddrinfo(res);
     close(fd);
@@ -478,6 +482,11 @@ void message_tcp(char *buffer){
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
     char response[128];
+    char code[4]; 
+    char status[6];
+    char filename[128];
+    int filesize;
+    int bytes_read;
 
     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
     if (fd == -1){
@@ -508,14 +517,16 @@ void message_tcp(char *buffer){
     }
 
     n = read(fd, response, 128);
-    if (n == -1){
-        perror("read error");
-        exit(1);
-    }
+    
+    bytes_read = n;
+    sscanf(response, "%s %s %s %d", code, status, filename, &filesize);
+    printf("%s %s %s %d\n", code, status, filename, filesize);
+
+
 
     write(1, response, n);
-    response[n] = '\0';
-    parse_response_tcp(response);
+    //response[n] = '\0';
+    //parse_response_tcp(response);
 
     freeaddrinfo(res);
     close(fd);
@@ -524,9 +535,9 @@ void message_tcp(char *buffer){
 
 int main(int argc, char *argv[]){   
     char command[20];
-    scanf("%s", command);
 
     parse_args(argc, argv);
+    scanf("%s", command);
 
     while (strcmp(command, EXIT) != 0){
         
@@ -569,10 +580,3 @@ int main(int argc, char *argv[]){
     }
     return 0;
 }
-
-/*
-TO DO:
-EXIT - verificar se está um jogo em curso ou não antes de fechar e se estiver terminá-lo
-acabar a parte da PLG com os diferentes status
-continuar
-*/
