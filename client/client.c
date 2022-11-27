@@ -3,6 +3,7 @@
 char ip[16];
 char port[6];
 char plid[7];
+int game_ongoing = 0;
 
 struct current_game {
     int trial;
@@ -125,6 +126,7 @@ void parse_response_udp(char *message){
         }
         else if (strcmp(status, NOK) == 0){
             current_game.errors++;
+            current_game.trial++;
             printf("Error: The letter does not appear in current word\n");
         }
         else if (strcmp(status, DUP) == 0){
@@ -138,7 +140,6 @@ void parse_response_udp(char *message){
         else if (strcmp(status, OVR) == 0){
             current_game.errors++;
             printf("Error: Wrong letter and game over\n");
-            quit_function();
         }
 
         else if (strcmp(status, INV) == 0){
@@ -153,6 +154,7 @@ void parse_response_udp(char *message){
     else if (strcmp(code, RWG) == 0){
         if (strcmp(status, NOK) == 0){
             current_game.errors++;
+            current_game.trial++;
             printf("Error: The letter does not appear in current word\n");
         }
 
@@ -163,7 +165,6 @@ void parse_response_udp(char *message){
         else if (strcmp(status, OVR) == 0){
             current_game.errors++;
             printf("Error: Wrong word and game over\n");
-            quit_function();
         }
 
         else if (strcmp(status, INV) == 0){
@@ -217,6 +218,7 @@ void set_new_game(char *message){
     current_game.errors = 0;
     current_game.trial = 1;
     strcpy(current_game.last_letter, "");
+    game_ongoing = 1;
     printf("New game started (max %d errors): %s (word lenght: %d)\n", 
     current_game.max_errors, current_game.word, current_game.lenght);
 }
@@ -257,6 +259,7 @@ void play_made(char *message){
 
     for (int i = 0; i < n; i++){
         int index = pos[i] - '0';
+        printf("%d\n", index);
         current_game.word[index-1] = current_game.last_letter[0];
     }
     printf("Correct Letter: %s\n", current_game.word);
@@ -269,13 +272,11 @@ void win_function(){
         }
     }
     printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
-    quit_function();
 }
 
 void win_word_function(){
     strcpy(current_game.word, current_game.word_guessed);
     printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
-    quit_function();
 }
 
 // function to send a message to the server to start a new game
@@ -324,6 +325,7 @@ void quit_function(){
     char message[12];
     sprintf(message, "%s %s\n", QUT, plid);
     message_udp(message);
+    game_ongoing = 0;
 }
 
 void message_udp(char *buffer){
@@ -402,7 +404,10 @@ int main(int argc, char *argv[]){
         }
         scanf("%s", command);
     }
-    quit_function();
+
+    if (game_ongoing == 1){
+        quit_function();
+    }
     return 0;
 }
 
