@@ -468,7 +468,6 @@ void win_word_function(){
 
    -------------------------------------------------------------------------------------------------------------- */
 
-
 int read_buffer2string(int fd, char *buffer, char *string) {
     int errcode;
     int n;
@@ -593,29 +592,6 @@ void message_tcp(char *buffer){
 
     freeaddrinfo(res);
     close(fd);
-}
-
-int read_buffer2string(int fd, char *buffer, char *string) {
-    int errcode;
-    int n;
-
-    int bytes = 0;
-    n = read(fd, buffer+bytes, 1);
-    if (n <= 0) {
-        perror("read error");
-        exit(1);
-    }
-    while (buffer[bytes] != ' ') {
-        bytes++;
-        n = read(fd, buffer+bytes, 1);
-        if (n <= 0) {
-            perror("read error");
-            exit(1);
-        }
-    }
-    buffer[bytes++] = '\0';
-    strcpy(string, buffer);
-    return bytes;
 }
 
 void parse_response_tcp(int fd, char *message){
