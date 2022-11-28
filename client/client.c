@@ -167,7 +167,6 @@ void play_function(){
     scanf("%s", current_game.last_letter);
     sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
 
-    puts(message);
     message_udp(message);
     free(message);
 }
@@ -189,23 +188,19 @@ void guess_function(){
 }
 
 void scoreboard_function(){
-    char message[5];
-    sprintf(message, "%s\n", GSB);
-    printf("%s", message);
-    message_tcp(message);
+    message_tcp(GSB);
 }
 
 void hint_function(){
     char message[12];
     sprintf(message, "%s %s\n", GHL, plid);
-    printf("%s", message);
     message_tcp(message);
 }
 
 void state_function(){
     char message[12];
+    // TO DO: check if plid is empty
     sprintf(message, "%s %s\n", STA, plid);
-    printf("%s", message);
     message_tcp(message);
 }
 
@@ -262,7 +257,6 @@ void message_udp(char *buffer){
         exit(1);
     }
 
-    write(1, response, n);
     response[n] = '\0';
     parse_response_udp(response);
 
@@ -532,7 +526,6 @@ char* get_file(int fd, char* code, char* status, char* response) {
     fclose(fp);
 
     sprintf(response, "%s %s %s %d", code, status, filename, filesize);
-    printf("%s\n", response);
 
     return response;
 }
@@ -603,7 +596,7 @@ void parse_response_tcp(int fd, char *message){
 
     if (strcmp(code, RSB) == 0){
         if (strcmp(status, OK) == 0){
-            scoreboard(message);
+            scoreboard(fd, message);
         }
 
         else if (strcmp(status, EMPTY) == 0){
@@ -640,11 +633,15 @@ void parse_response_tcp(int fd, char *message){
     }
 }
 
-void scoreboard(char *message){
+void scoreboard(int fd, char *message){
     char code[4];
-    char status[4];
-    char fname[20];
-    int fsize;
+    char status[6];
+    char response[500000];
+
+    sscanf(message, "%s %s", code, status);
+
+    // READ FILENAME, FILESIZE AND WRITE IMAGE
+    get_file(fd, code, status, response);
 
 }
 

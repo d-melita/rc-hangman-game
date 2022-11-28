@@ -46,7 +46,7 @@
 #define RQT "RQT"
 #define REV "REV"
 #define RVV "RVV"
-#define GSB "GSB"
+#define GSB "GSB\n"
 #define RSB "RSB"
 #define GHL "GHL"
 #define RHL "RHL"
@@ -93,33 +93,29 @@
 
 
 // Function prototypes
-
-void message_udp(char *buffer);
-void set_new_game(char *message);
-void play_made(char *message);
+void parse_args(int argc, char *argv[]);
 void get_ip();
 void get_ip_known_host(char *host);
-void parse_args(int argc, char *argv[]);
-void parse_response_udp(char *message);
-void parse_response_tcp(int fd, char *message);
-void set_new_game(char *message);
-void parse_message_play(char *message, char pos[]);
-void play_made(char *message);
 void start_function();
 void play_function();
 void guess_function();
-void scoreboard_function();
-void quit_function();
-void message_udp(char *buffer);
-void message_tcp(char *buffer);
-void win_function();
-void win_word_function();
-void scoreboard(char *message);
-void get_hint(int fd, char *message);
-void game_status(int fd, char *message);
 void hint_function();
 void state_function();
+void scoreboard_function();
+void quit_function();
 
+void message_udp(char *buffer);
+void parse_response_udp(char *message);
+void set_new_game(char *message);
+void play_made(char *message);
+void parse_message_play(char *message, char pos[]);
+void win_function();
+void win_word_function();
 
+void message_tcp(char *buffer);
+void parse_response_tcp(int fd, char *message);
+void scoreboard(int fd, char *message);
+void get_hint(int fd, char *message);
+void game_status(int fd, char *message);
 
-#endif
+#endif  
