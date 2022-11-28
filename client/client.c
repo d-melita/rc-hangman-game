@@ -157,7 +157,7 @@ void parse_response_udp(char *message){
         if (strcmp(status, NOK) == 0){
             current_game.errors++;
             current_game.trial++;
-            printf("Error: The letter does not appear in current word\n");
+            printf("Error: The guess was incorrect!\n");
         }
 
         else if (strcmp(status, WIN) == 0){
@@ -371,7 +371,6 @@ void start_function(){
 void play_function(){
     char *message;
     char trial_str[10];
-    int trial = current_game.trial;
 
     sprintf(trial_str, "%d", current_game.trial);
     message = malloc(13 + strlen(trial_str));
@@ -379,6 +378,7 @@ void play_function(){
     scanf("%s", current_game.last_letter);
     sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
 
+    puts(message);
     message_udp(message);
     free(message);
 }
@@ -468,11 +468,34 @@ void message_udp(char *buffer){
     }
 
     write(1, response, n);
-    //response[n] = '\0';
-    //parse_response_udp(response);
+    response[n] = '\0';
+    parse_response_udp(response);
 
     freeaddrinfo(res);
     close(fd);
+}
+
+int read_buffer2string(int fd, char *buffer, char *string) {
+    int errcode;
+    int n;
+
+    int bytes = 0;
+    n = read(fd, buffer+bytes, 1);
+    if (n <= 0) {
+        perror("read error");
+        exit(1);
+    }
+    while (buffer[bytes] != ' ') {
+        bytes++;
+        n = read(fd, buffer+bytes, 1);
+        if (n <= 0) {
+            perror("read error");
+            exit(1);
+        }
+    }
+    buffer[bytes++] = '\0';
+    strcpy(string, buffer);
+    return bytes;
 }
 
 void message_tcp(char *buffer){
@@ -481,12 +504,12 @@ void message_tcp(char *buffer){
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    char response[128];
+    char response[500000];
     char code[4]; 
     char status[6];
     char filename[128];
     int filesize;
-    int bytes_read;
+    int bytes;
 
     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
     if (fd == -1){
@@ -510,24 +533,67 @@ void message_tcp(char *buffer){
         exit(1);
     }
 
-    n = write(fd, buffer, strlen(buffer));
-    if (n == -1){
-        perror("write error");
-        exit(1);
+    // Send message to server
+    bytes = 0;
+    while (bytes < strlen(buffer)) {
+        n = write(fd, buffer+bytes, strlen(buffer)-bytes);
+        if (n <= 0) {
+            perror("write error");
+            exit(1);
+        }
+        bytes += n;
     }
 
-    n = read(fd, response, 128);
-    
-    bytes_read = n;
-    sscanf(response, "%s %s %s %d", code, status, filename, &filesize);
-    printf("%s %s %s %d\n", code, status, filename, filesize);
+    // READ CODE
+    bytes += read_buffer2string(fd, response, code);
 
+    if (strcmp(code, "RHL") == 0) {
+        // READ STATUS
+        bytes += read_buffer2string(fd, response, status);
 
+        if (strcmp(status, "OK") == 0) {
+            // READ FILENAME
+            bytes += read_buffer2string(fd, response, filename);
 
-    write(1, response, n);
-    //response[n] = '\0';
-    //parse_response_tcp(response);
+            // READ FILESIZE
+            bytes += read_buffer2string(fd, response, response);
+            filesize = atoi(response);
 
+            // READ AND WRITE IMAGE
+            FILE *fp = fopen(filename, "w");
+            if (fp == NULL)
+            {
+                perror("fopen error");
+                exit(1);
+            }
+
+            bytes = 0;
+            while (bytes < filesize)
+            {
+                n = read(fd, response+bytes, 1);
+                if (n <= 0)
+                {
+                    perror("read error");
+                    exit(1);
+                }
+                n = fwrite(response + bytes, 1, 1, fp);
+                if (n <= 0)
+                {
+                    perror("fwrite error");
+                    exit(1);
+                }
+                bytes++;
+            }
+            fclose(fp);
+
+            sprintf(response, "%s %s %s %d", code, status, filename, filesize);
+            printf("%s\n", response);
+        } else {
+            puts("Error: RHL status not OK");
+        }
+    } else {
+        printf("ERROR: Unknown response from server");
+    }
     freeaddrinfo(res);
     close(fd);
 }
