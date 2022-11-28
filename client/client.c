@@ -498,19 +498,63 @@ int read_buffer2string(int fd, char *buffer, char *string) {
     return bytes;
 }
 
+char* get_file(int fd, char* code, char* status, char* response) {
+    int n, errcode;
+    char filename[128];
+    int filesize;
+    int bytes = 0;
+
+    // READ FILENAME
+    bytes += read_buffer2string(fd, response, filename);
+
+    // READ FILESIZE
+    bytes += read_buffer2string(fd, response, response);
+    filesize = atoi(response);
+
+    // READ AND WRITE IMAGE
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL)
+    {
+        perror("fopen error");
+        exit(1);
+    }
+
+    bytes = 0;
+    while (bytes < filesize)
+    {
+        n = read(fd, response+bytes, 1);
+        if (n <= 0)
+        {
+            perror("read error");
+            exit(1);
+        }
+        n = fwrite(response + bytes, 1, 1, fp);
+        if (n <= 0)
+        {
+            perror("fwrite error");
+            exit(1);
+        }
+        bytes++;
+    }
+    fclose(fp);
+
+    sprintf(response, "%s %s %s %d", code, status, filename, filesize);
+    printf("%s\n", response);
+
+    return response;
+}
+
 void message_tcp(char *buffer){
     int fd, errcode;
     ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
+    int bytes;
     char response[500000];
     char code[4]; 
     char status[6];
-    char filename[128];
-    int filesize;
-    int bytes;
-
+    
     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
     if (fd == -1){
         perror("socket error");
@@ -545,54 +589,36 @@ void message_tcp(char *buffer){
     }
 
     // READ CODE
-    bytes += read_buffer2string(fd, response, code);
+    read_buffer2string(fd, response, code);
 
-    if (strcmp(code, "RHL") == 0) {
+    if (strcmp(code, "RHL") == 0 || strcmp(code, "RST") == 0) { // READ HINT OR STATE
+
         // READ STATUS
-        bytes += read_buffer2string(fd, response, status);
+        read_buffer2string(fd, response, status);
 
-        if (strcmp(status, "OK") == 0) {
-            // READ FILENAME
-            bytes += read_buffer2string(fd, response, filename);
+        if ((strcmp(code, "RHL") == 0 && strcmp(status, "OK") == 0) || // HINT OK or STATE ACTIVE
+            strcmp(code, "RST") == 0 && strcmp(status, "ACT") == 0) {
 
-            // READ FILESIZE
-            bytes += read_buffer2string(fd, response, response);
-            filesize = atoi(response);
+            // READ FILENAME, FILESIZE AND WRITE IMAGE
+            get_file(fd, code, status, response);
 
-            // READ AND WRITE IMAGE
-            FILE *fp = fopen(filename, "w");
-            if (fp == NULL)
-            {
-                perror("fopen error");
-                exit(1);
-            }
+        } else if (strcmp(code, "RHL") && strcmp(status, "NOK") == 0) { // HINT NOK
 
-            bytes = 0;
-            while (bytes < filesize)
-            {
-                n = read(fd, response+bytes, 1);
-                if (n <= 0)
-                {
-                    perror("read error");
-                    exit(1);
-                }
-                n = fwrite(response + bytes, 1, 1, fp);
-                if (n <= 0)
-                {
-                    perror("fwrite error");
-                    exit(1);
-                }
-                bytes++;
-            }
-            fclose(fp);
-
-            sprintf(response, "%s %s %s %d", code, status, filename, filesize);
-            printf("%s\n", response);
-        } else {
             puts("Error: RHL status not OK");
+
+        } else if (strcmp(code, "RST") && strcmp(status, "FIN") == 0) { // STATE FINISHED
+
+            puts("No ongoing game for this player.");
+
+        } else { 
+            printf("%s %s\n", code, "ERR"); // ERROR
         }
+    } else if (strcmp(code, "GSB") == 0) {
+
+        // TODO: Scoreboard
+
     } else {
-        printf("ERROR: Unknown response from server");
+        printf("ERROR: Unknown code from server");
     }
     freeaddrinfo(res);
     close(fd);
