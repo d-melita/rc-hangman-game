@@ -17,43 +17,52 @@ struct current_game {
 
 struct current_game current_game;
 
-//get the ip of current machine when -n not specified
-void get_ip() {
-    char host[256];
-    int hostname;
+int main(int argc, char *argv[]){   
+    char command[20];
 
-    hostname = gethostname(host, sizeof(host));
-    if (hostname == -1) {
-        perror("error getting hostname");
-        exit(1);
-    }
+    parse_args(argc, argv);
+    scanf("%s", command);
 
-    get_ip_known_host(host);
-}
-
-// get the ip of host when -n specified
-void get_ip_known_host(char *host){
-    struct addrinfo hints, *res, *p;
-    int errcode;
-    char buffer[INET_ADDRSTRLEN];
-    struct in_addr *addr;
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET; // IPv4
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_CANONNAME;
-
-    if ((errcode = getaddrinfo(host, NULL, &hints, &res)) != 0) {
-        fprintf(stderr, "error: gettaddrinfo: %s\n", gai_strerror(errcode));
-    }
-    else {
-        for (p = res; p != NULL; p = p->ai_next){
-            addr = &((struct sockaddr_in *) p -> ai_addr) -> sin_addr;
-            inet_ntop(p->ai_family, addr, buffer, sizeof(buffer));
-            strcpy(ip, buffer);
+    while (strcmp(command, EXIT) != 0){
+        
+        if (strcmp(command, START) == 0 || strcmp(command, SG) == 0){
+            start_function();
         }
-        freeaddrinfo(res);
+
+        else if (strcmp(command, PLAY) == 0 || strcmp(command, PL) == 0){
+            play_function();
+        }
+
+        else if (strcmp(command, QUIT) == 0){
+            quit_function();
+        }
+
+        else if (strcmp(command, GUESS) == 0 || strcmp(command, GW) == 0){
+            guess_function();
+        }
+
+        else if (strcmp(command, SCOREBOARD) == 0 || strcmp(command, SB) == 0){
+            scoreboard_function();
+        }
+
+        else if (strcmp(command, HINT) == 0 || strcmp(command, H) == 0){
+            hint_function();
+        }
+
+        else if (strcmp(command, STATE) == 0 || strcmp(command, ST) == 0){
+            state_function();
+        }
+
+        else {
+            printf("Invalid command\n");
+        }
+        scanf("%s", command);
     }
+
+    if (game_ongoing == 1){
+        quit_function();
+    }
+    return 0;
 }
 
 //function to parse arguments (ip and port)
@@ -99,6 +108,168 @@ void parse_args(int argc, char *argv[]){
     }
 
 }
+
+//get the ip of current machine when -n not specified
+void get_ip() {
+    char host[256];
+    int hostname;
+
+    hostname = gethostname(host, sizeof(host));
+    if (hostname == -1) {
+        perror("error getting hostname");
+        exit(1);
+    }
+
+    get_ip_known_host(host);
+}
+
+// get the ip of host when -n specified
+void get_ip_known_host(char *host){
+    struct addrinfo hints, *res, *p;
+    int errcode;
+    char buffer[INET_ADDRSTRLEN];
+    struct in_addr *addr;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_CANONNAME;
+
+    if ((errcode = getaddrinfo(host, NULL, &hints, &res)) != 0) {
+        fprintf(stderr, "error: gettaddrinfo: %s\n", gai_strerror(errcode));
+    }
+    else {
+        for (p = res; p != NULL; p = p->ai_next){
+            addr = &((struct sockaddr_in *) p -> ai_addr) -> sin_addr;
+            inet_ntop(p->ai_family, addr, buffer, sizeof(buffer));
+            strcpy(ip, buffer);
+        }
+        freeaddrinfo(res);
+    }
+}
+
+// function to send a message to the server to start a new game
+void start_function(){
+    char message[12];
+    scanf("%s", plid);
+    sprintf(message, "%s %s\n", SNG, plid);
+    message_udp(message);
+}
+
+// function to send a message to the server to make a play
+void play_function(){
+    char *message;
+    char trial_str[10];
+
+    sprintf(trial_str, "%d", current_game.trial);
+    message = malloc(13 + strlen(trial_str));
+
+    scanf("%s", current_game.last_letter);
+    sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
+
+    puts(message);
+    message_udp(message);
+    free(message);
+}
+
+// function to send a message to the server to make a guess
+void guess_function(){
+    char *message;
+    char trial_str[10];
+
+    sprintf(trial_str, "%d", current_game.trial);
+    scanf("%s", current_game.word_guessed);
+
+    message = malloc(12 + strlen(current_game.word_guessed) + strlen(trial_str));
+
+    sprintf(message, "%s %s %s %d\n", PWG, plid, current_game.word_guessed, current_game.trial);
+    message_udp(message);
+
+    free(message);
+}
+
+void scoreboard_function(){
+    char message[5];
+    sprintf(message, "%s\n", GSB);
+    printf("%s", message);
+    message_tcp(message);
+}
+
+void hint_function(){
+    char message[12];
+    sprintf(message, "%s %s\n", GHL, plid);
+    printf("%s", message);
+    message_tcp(message);
+}
+
+void state_function(){
+    char message[12];
+    sprintf(message, "%s %s\n", STA, plid);
+    printf("%s", message);
+    message_tcp(message);
+}
+
+// function to send a message to the server to quit the game
+void quit_function(){
+    char message[12];
+    sprintf(message, "%s %s\n", QUT, plid);
+    message_udp(message);
+    game_ongoing = 0;
+}
+
+/* -----------------------------------------------------------------------------------------------------------------
+    
+    
+                                                CLIENT UDP FUNCTIONS
+
+
+   -------------------------------------------------------------------------------------------------------------- */
+void message_udp(char *buffer){
+    int fd, errcode;
+    ssize_t n;
+    socklen_t addrlen;
+    struct addrinfo hints, *res;
+    struct sockaddr_in addr;
+    char response[128];
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
+    if (fd == -1){
+        perror("socket error");
+        exit(1);
+    }
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    errcode = getaddrinfo(ip, port, &hints, &res);
+    if (errcode != 0){
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        exit(1);
+    }
+
+    n = sendto(fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen);
+    if (n == -1){
+        perror("sendto error");
+        exit(1);
+    }
+
+    addrlen=sizeof(addr);
+    n = recvfrom(fd, response, 128, 0, (struct sockaddr *)&addr, &addrlen);
+
+    if (n == -1){
+        perror("recvfrom error");
+        exit(1);
+    }
+
+    write(1, response, n);
+    response[n] = '\0';
+    parse_response_udp(response);
+
+    freeaddrinfo(res);
+    close(fd);
+}
+
 
 //function to parse server response
 void parse_response_udp(char *message){
@@ -213,76 +384,6 @@ void parse_response_udp(char *message){
     }
 }
 
-void parse_response_tcp(char *message){
-    char code[4];
-    char status[6];
-
-    // scan the message and get the code and status
-    sscanf(message, "%s %s", code, status);
-
-    if (strcmp(code, RSB) == 0){
-        if (strcmp(status, OK) == 0){
-            scoreboard(message);
-        }
-
-        else if (strcmp(status, EMPTY) == 0){
-            printf("Scoreboard is empty\n");
-        }
-    }
-
-    else if (strcmp(code, RHL) == 0){
-        if (strcmp(status, OK) == 0){
-            get_hint(message);
-        }
-
-        else if ((strcmp, NOK) == 0){
-            printf("Error: There's no file to be sent or some other problem occured\n");
-        }
-    }
-
-    else if (strcmp(code, RST) == 0){
-        if (strcmp(status, ACT) == 0 || strcmp(status, FIN) == 0){
-            game_status(message); // active or last game finished
-        }
-
-        else if (strcmp(status, NOK) == 0){
-            printf("Game server did not find any games\n");
-        }
-    }
-
-    else if (strcmp(code, ERR) == 0){
-        printf("Error: unexpected protocol message received\n");
-    }
-
-    else{
-        printf("An error occurred\n");
-    }
-}
-
-void scoreboard(char *message){
-    char code[4];
-    char status[4];
-    char fname[20];
-    int fsize;
-    FILE *fdata;
-}
-
-void get_hint(char *message){
-    char code[4];
-    char status[4];
-    char fname[20];
-    int fsize;
-    FILE *fdata;
-}
-
-void game_status(char *message){
-    char code[4];
-    char status[4];
-    char fname[20];
-    int fsize;
-    FILE *fdata;
-}
-
 // function to set a new game
 void set_new_game(char *message){
     char code[4];
@@ -359,144 +460,15 @@ void win_word_function(){
     printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
 }
 
-// function to send a message to the server to start a new game
-void start_function(){
-    char message[12];
-    scanf("%s", plid);
-    sprintf(message, "%s %s\n", SNG, plid);
-    message_udp(message);
-}
+/* -----------------------------------------------------------------------------------------------------------------
+    
+    
+                                                CLIENT TCP FUNCTIONS
 
-// function to send a message to the server to make a play
-void play_function(){
-    char *message;
-    char trial_str[10];
 
-    sprintf(trial_str, "%d", current_game.trial);
-    message = malloc(13 + strlen(trial_str));
+   -------------------------------------------------------------------------------------------------------------- */
 
-    scanf("%s", current_game.last_letter);
-    sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
 
-    puts(message);
-    message_udp(message);
-    free(message);
-}
-
-// function to send a message to the server to make a guess
-void guess_function(){
-    char *message;
-    char trial_str[10];
-
-    sprintf(trial_str, "%d", current_game.trial);
-    scanf("%s", current_game.word_guessed);
-
-    message = malloc(12 + strlen(current_game.word_guessed) + strlen(trial_str));
-
-    sprintf(message, "%s %s %s %d\n", PWG, plid, current_game.word_guessed, current_game.trial);
-    message_udp(message);
-    current_game.trial++;
-
-    free(message);
-}
-
-void scoreboard_function(){
-    char message[5];
-    sprintf(message, "%s\n", GSB);
-    printf("%s", message);
-    message_tcp(message);
-}
-
-void hint_function(){
-    char message[12];
-    sprintf(message, "%s %s\n", GHL, plid);
-    printf("%s", message);
-    message_tcp(message);
-}
-
-void state_function(){
-    char message[12];
-    sprintf(message, "%s %s\n", STA, plid);
-    printf("%s", message);
-    message_tcp(message);
-}
-
-// function to send a message to the server to quit the game
-void quit_function(){
-    char message[12];
-    sprintf(message, "%s %s\n", QUT, plid);
-    message_udp(message);
-    game_ongoing = 0;
-}
-
-void message_udp(char *buffer){
-    int fd, errcode;
-    ssize_t n;
-    socklen_t addrlen;
-    struct addrinfo hints, *res;
-    struct sockaddr_in addr;
-    char response[128];
-
-    fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
-    if (fd == -1){
-        perror("socket error");
-        exit(1);
-    }
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-
-    errcode = getaddrinfo(ip, port, &hints, &res);
-    if (errcode != 0){
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
-        exit(1);
-    }
-
-    n = sendto(fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen);
-    if (n == -1){
-        perror("sendto error");
-        exit(1);
-    }
-
-    addrlen=sizeof(addr);
-    n = recvfrom(fd, response, 128, 0, (struct sockaddr *)&addr, &addrlen);
-
-    if (n == -1){
-        perror("recvfrom error");
-        exit(1);
-    }
-
-    write(1, response, n);
-    response[n] = '\0';
-    parse_response_udp(response);
-
-    freeaddrinfo(res);
-    close(fd);
-}
-
-int read_buffer2string(int fd, char *buffer, char *string) {
-    int errcode;
-    int n;
-
-    int bytes = 0;
-    n = read(fd, buffer+bytes, 1);
-    if (n <= 0) {
-        perror("read error");
-        exit(1);
-    }
-    while (buffer[bytes] != ' ') {
-        bytes++;
-        n = read(fd, buffer+bytes, 1);
-        if (n <= 0) {
-            perror("read error");
-            exit(1);
-        }
-    }
-    buffer[bytes++] = '\0';
-    strcpy(string, buffer);
-    return bytes;
-}
 
 void message_tcp(char *buffer){
     int fd, errcode;
@@ -598,51 +570,95 @@ void message_tcp(char *buffer){
     close(fd);
 }
 
+int read_buffer2string(int fd, char *buffer, char *string) {
+    int errcode;
+    int n;
 
-int main(int argc, char *argv[]){   
-    char command[20];
+    int bytes = 0;
+    n = read(fd, buffer+bytes, 1);
+    if (n <= 0) {
+        perror("read error");
+        exit(1);
+    }
+    while (buffer[bytes] != ' ') {
+        bytes++;
+        n = read(fd, buffer+bytes, 1);
+        if (n <= 0) {
+            perror("read error");
+            exit(1);
+        }
+    }
+    buffer[bytes++] = '\0';
+    strcpy(string, buffer);
+    return bytes;
+}
 
-    parse_args(argc, argv);
-    scanf("%s", command);
+void parse_response_tcp(char *message){
+    char code[4];
+    char status[6];
 
-    while (strcmp(command, EXIT) != 0){
-        
-        if (strcmp(command, START) == 0 || strcmp(command, SG) == 0){
-            start_function();
+    // scan the message and get the code and status
+    sscanf(message, "%s %s", code, status);
+
+    if (strcmp(code, RSB) == 0){
+        if (strcmp(status, OK) == 0){
+            scoreboard(message);
         }
 
-        else if (strcmp(command, PLAY) == 0 || strcmp(command, PL) == 0){
-            play_function();
+        else if (strcmp(status, EMPTY) == 0){
+            printf("Scoreboard is empty\n");
         }
-
-        else if (strcmp(command, QUIT) == 0){
-            quit_function();
-        }
-
-        else if (strcmp(command, GUESS) == 0 || strcmp(command, GW) == 0){
-            guess_function();
-        }
-
-        else if (strcmp(command, SCOREBOARD) == 0 || strcmp(command, SB) == 0){
-            scoreboard_function();
-        }
-
-        else if (strcmp(command, HINT) == 0 || strcmp(command, H) == 0){
-            hint_function();
-        }
-
-        else if (strcmp(command, STATE) == 0 || strcmp(command, ST) == 0){
-            state_function();
-        }
-
-        else {
-            printf("Invalid command\n");
-        }
-        scanf("%s", command);
     }
 
-    if (game_ongoing == 1){
-        quit_function();
+    else if (strcmp(code, RHL) == 0){
+        if (strcmp(status, OK) == 0){
+            get_hint(message);
+        }
+
+        else if ((strcmp, NOK) == 0){
+            printf("Error: There's no file to be sent or some other problem occured\n");
+        }
     }
-    return 0;
+
+    else if (strcmp(code, RST) == 0){
+        if (strcmp(status, ACT) == 0 || strcmp(status, FIN) == 0){
+            game_status(message); // active or last game finished
+        }
+
+        else if (strcmp(status, NOK) == 0){
+            printf("Game server did not find any games\n");
+        }
+    }
+
+    else if (strcmp(code, ERR) == 0){
+        printf("Error: unexpected protocol message received\n");
+    }
+
+    else{
+        printf("An error occurred\n");
+    }
+}
+
+void scoreboard(char *message){
+    char code[4];
+    char status[4];
+    char fname[20];
+    int fsize;
+    FILE *fdata;
+}
+
+void get_hint(char *message){
+    char code[4];
+    char status[4];
+    char fname[20];
+    int fsize;
+    FILE *fdata;
+}
+
+void game_status(char *message){
+    char code[4];
+    char status[4];
+    char fname[20];
+    int fsize;
+    FILE *fdata;
 }
