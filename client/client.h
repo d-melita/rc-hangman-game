@@ -108,7 +108,7 @@ void message_udp(char *buffer);
 void parse_response_udp(char *message);
 void set_new_game(char *message);
 void play_made(char *message);
-void parse_message_play(char *message, char pos[]);
+void parse_message_play(char *message, int pos[]);
 void win_function();
 void win_word_function();
 

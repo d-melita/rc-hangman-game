@@ -400,7 +400,7 @@ void set_new_game(char *message){
 }
 
 // function to know which positions to change in the word
-void parse_message_play(char *message, char pos[]){
+void parse_message_play(char *message, int pos[]){
     char c;
     int ne = 0; // nb of white spaces
     int i = 0;
@@ -415,7 +415,13 @@ void parse_message_play(char *message, char pos[]){
     }
     for (j = i; j < strlen(message); j++){
         if (message[j] != ' '){
-            pos[index] = message[j];
+            if (message[j+1] == ' ' || message[j+1] == '\n'){
+                pos[index] = message[j] - '0';
+
+            }
+            else{
+                pos[index] = (message[j] - '0') * 10 + (message[j+1] - '0');
+            }
             index++;
         }
     }
@@ -429,13 +435,12 @@ void play_made(char *message){
     char status[4];
 
     sscanf(message, "%s %s %d %d", code, status, &current_game.trial, &n);
-    char pos[n];
+    int pos[n];
 
     parse_message_play(message, pos);
 
     for (int i = 0; i < n; i++){
-        int index = pos[i] - '0';
-        current_game.word[index-1] = current_game.last_letter[0];
+        current_game.word[pos[i]-1] = current_game.last_letter[0];
     }
     printf("Correct Letter: %s\n", current_game.word);
 }
