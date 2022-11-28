@@ -11,4 +11,4 @@ client: client.c client.o
 .PHONY: clean
 
 clean: 
-	rm -f *.o client *.jpg *.jpeg *.svg *.png 
+	rm -f *.o client *.jpg *.jpeg *.svg *.png *.txt
