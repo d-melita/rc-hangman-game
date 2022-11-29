@@ -8,7 +8,7 @@ int game_ongoing = 0;
 struct current_game {
     int trial;
     char word[31];
-    int lenght;
+    int length;
     int errors;
     int max_errors;
     char last_letter[2];
@@ -17,14 +17,14 @@ struct current_game {
 
 struct current_game current_game;
 
-int main(int argc, char *argv[]){   
+int main(int argc, char *argv[]){
     char command[20];
 
     parse_args(argc, argv);
     scanf("%s", command);
 
     while (strcmp(command, EXIT) != 0){
-        
+
         if (strcmp(command, START) == 0 || strcmp(command, SG) == 0){
             start_function();
         }
@@ -153,7 +153,12 @@ void start_function(){
     char message[12];
     scanf("%s", plid);
     sprintf(message, "%s %s\n", SNG, plid);
-    message_udp(message);
+
+    if (game_ongoing == 1){
+        printf("Game already in progress.\n");
+    } else {
+        message_udp(message);
+    }
 }
 
 // function to send a message to the server to make a play
@@ -213,8 +218,8 @@ void quit_function(){
 }
 
 /* -----------------------------------------------------------------------------------------------------------------
-    
-    
+
+
                                                 CLIENT UDP FUNCTIONS
 
 
@@ -368,7 +373,7 @@ void parse_response_udp(char *message){
         }
         */
     }
-    
+
     else if (strcmp(code, ERR) == 0){
         printf("Error: unexpected protocol message received\n");
     }
@@ -382,21 +387,22 @@ void parse_response_udp(char *message){
 void set_new_game(char *message){
     char code[4];
     char status[4];
-    char *word; // word only containing _ _ _ _ _ (because we dont know the lenght of the word)
-    sscanf(message, "%s %s %d %d", code, status, 
-    &current_game.lenght, &current_game.max_errors);
-    word = (char*) malloc(current_game.lenght * sizeof(char));
-    for (int i = 0; i < current_game.lenght; i++){
+    char *word; // word only containing _ _ _ _ _ (because we dont know the length of the word)
+    sscanf(message, "%s %s %d %d", code, status,
+    &current_game.length, &current_game.max_errors);
+    word = (char*) malloc((current_game.length+1) * sizeof(char));
+    for (int i = 0; i < current_game.length; i++){
         word[i] = '_';
     }
+    word[current_game.length] = '\0';
     // set new game components
     strcpy(current_game.word, word);
     current_game.errors = 0;
     current_game.trial = 1;
     strcpy(current_game.last_letter, "");
     game_ongoing = 1;
-    printf("New game started (max %d errors): %s (word lenght: %d)\n", 
-    current_game.max_errors, current_game.word, current_game.lenght);
+    printf("New game started (max %d errors): %s (word length: %d)\n",
+    current_game.max_errors, current_game.word, current_game.length);
 }
 
 // function to know which positions to change in the word
@@ -446,7 +452,7 @@ void play_made(char *message){
 }
 
 void win_function(){
-    for (int i = 0; i < current_game.lenght; i++){
+    for (int i = 0; i < current_game.length; i++){
         if (current_game.word[i] == '_'){
             current_game.word[i] = current_game.last_letter[0];
         }
@@ -460,8 +466,8 @@ void win_word_function(){
 }
 
 /* -----------------------------------------------------------------------------------------------------------------
-    
-    
+
+
                                                 CLIENT TCP FUNCTIONS
 
 
@@ -493,6 +499,7 @@ int read_buffer2string(int fd, char *buffer, char *string) {
 char* get_file(int fd, char* code, char* status, char* response) {
     int n, errcode;
     char filename[128];
+	char filesize_str[128];
     int filesize;
     int bytes = 0;
 
@@ -500,8 +507,8 @@ char* get_file(int fd, char* code, char* status, char* response) {
     bytes += read_buffer2string(fd, response, filename);
 
     // READ FILESIZE
-    bytes += read_buffer2string(fd, response, response);
-    filesize = atoi(response);
+    bytes += read_buffer2string(fd, response, filesize_str);
+    filesize = atoi(filesize_str);
 
     // READ AND WRITE IMAGE
     FILE *fp = fopen(filename, "w");
@@ -546,7 +553,7 @@ void message_tcp(char *buffer){
     char code[4];
     char status[4];
     char init[20];
-    
+
     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
     if (fd == -1){
         perror("socket error");
@@ -584,7 +591,7 @@ void message_tcp(char *buffer){
     read_buffer2string(fd, response, code);
     // READ STATUS
     read_buffer2string(fd, response, status);
-    
+
     sprintf(init, "%s %s", code, status);
     parse_response_tcp(fd, init);
 
