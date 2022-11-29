@@ -678,3 +678,4 @@ void game_status(int fd, char *message){
     // READ FILENAME, FILESIZE AND WRITE IMAGE
     get_file(fd, code, status, response);
 }
+
