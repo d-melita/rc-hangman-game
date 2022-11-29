@@ -1,6 +1,6 @@
 CC=gcc
 CFlags=
-DEPS = client.h
+DEPS= client.h
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)

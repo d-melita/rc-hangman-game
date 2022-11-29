@@ -67,14 +67,12 @@
 
 // Buffer sizes
 
-#define COUNT_CMD 8
-#define MAX_SIZE_CMD 10
-#define MAX_SIZE_ALTCMD 3
-
 #define SIZE_IP 15 // 3*. + 12*0-9
 #define SIZE_PORT 5
 #define SIZE_PLID 6
 #define MAX_SIZE_HOST 256
+
+#define READ_AMOUNT 512 // Default amount of bytes to read from TCP socket
 
 
 // Error messages (Consider adding '%s')
@@ -82,15 +80,36 @@
 #define ERR_INVALID_PLID "ERROR: Invalid player ID\n"
 #define ERR_INVALID_HOST "ERROR: Invalid hostname\n"
 #define ERR_INVALID_CMD "ERROR: Invalid command\n"
-#define ERR_GETADDRINFO "ERROR: getaddrinfo: %s\n"
+#define ERR_INVALID_ARGS "ERROR: Invalid arguments\n"
+#define ERR_PROTOCOL "ERROR: Sprotocol message\n"
+#define ERR_UNKNOWN_CODE "ERROR: Unexpected response code\n"
 #define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
 #define ERR_INVALID_OPTION "ERROR: Invalid option\n"
 #define ERR_ONGOING_GAME "ERROR: There is an ongoing game\n"
+#define ERR_NO_GAME "ERROR: There is no active game\n"
+#define ERR_NO_GAMES_FOUND "Game server did not find any games\n"
 #define ERR_NO_MATCHES_CHAR "ERROR: The given character does not appear in current word\n"
+#define ERR_DUP_CHAR "ERROR: The given letter has already been proposed\n"
+#define ERR_GETADDRINFO "ERROR: getaddrinfo: %s\n"
 #define ERR_SOCKET "ERROR: Socket error\n"
 #define ERR_SENDTO "ERROR: Sendto error\n"
 #define ERR_RECVFROM "ERROR: Recvfrom error\n"
+#define ERR_CONNECT "ERROR: connect error\n"
+#define ERR_WRITE "ERROR: write error\n"
+#define ERR_READ "ERROR: read error\n"
+#define ERR_OPEN_FILE "ERROR: Could not open file\n"
+#define ERR_CLOSE_FILE "ERROR: Could not close file\n"
+#define ERR_WRITE_FILE "ERROR: Could not write to file\n"
+#define ERR_NO_PLID "ERROR: No player ID\n"
+#define ERR_WRONG_CHAR_GAMEOVER "ERROR: The given letter does not appear in current word and the game is over\n"
+#define ERR_INVALID "ERROR: Trial number not valid or repeating last PLG stored at the GS with different letter\n"
+#define ERR_INVALID_2 "ERROR: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n"
+#define ERR_WRONG_GUESS "ERROR: The guess was incorrect!\n"
+#define ERR_DUP_GUESS "ERROR: This word has already been rejected\n"
+#define ERR_WRONG_GUESS_GAMEOVER "ERROR: The guess was incorrect and the game is over\n"
+#define ERR_FILE_NOK "ERROR: There's no file to be sent or some other problem occured\n"
 
+#define WARN_EMPTY_SB "Scoreboard is empty\n"
 
 // Function prototypes
 void parse_args(int argc, char *argv[]);
@@ -117,5 +136,6 @@ void parse_response_tcp(int fd, char *message);
 void scoreboard(int fd, char *message);
 void get_hint(int fd, char *message);
 void game_status(int fd, char *message);
+char* get_file(int fd, char* code, char* status, char* response);
 
 #endif  

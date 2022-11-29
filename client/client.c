@@ -2,7 +2,7 @@
 
 char ip[16];
 char port[6];
-char plid[7];
+char plid[7] = "";
 int game_ongoing = 0;
 
 struct current_game {
@@ -21,6 +21,7 @@ int main(int argc, char *argv[]){
     char command[20];
 
     parse_args(argc, argv);
+
     scanf("%s", command);
 
     while (strcmp(command, EXIT) != 0){
@@ -54,7 +55,7 @@ int main(int argc, char *argv[]){
         }
 
         else {
-            printf("Invalid command\n");
+            printf(ERR_INVALID_CMD);
         }
         scanf("%s", command);
     }
@@ -85,7 +86,7 @@ void parse_args(int argc, char *argv[]){
         }
 
         else{
-            printf("Invalid arguments\n");
+            printf(ERR_INVALID_ARGS);
             exit(1);
         }
     }
@@ -97,13 +98,13 @@ void parse_args(int argc, char *argv[]){
         }
 
         else{
-            printf("Invalid arguments\n");
+            printf(ERR_INVALID_ARGS);
             exit(1);
         }
     }
 
     else{
-        printf("Invalid arguments\n");
+        printf(ERR_INVALID_ARGS);
         exit(1);
     }
 
@@ -116,7 +117,7 @@ void get_ip() {
 
     hostname = gethostname(host, sizeof(host));
     if (hostname == -1) {
-        perror("error getting hostname");
+        perror(ERR_INVALID_HOST);
         exit(1);
     }
 
@@ -136,7 +137,7 @@ void get_ip_known_host(char *host){
     hints.ai_flags = AI_CANONNAME;
 
     if ((errcode = getaddrinfo(host, NULL, &hints, &res)) != 0) {
-        fprintf(stderr, "error: gettaddrinfo: %s\n", gai_strerror(errcode));
+        fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
     }
     else {
         for (p = res; p != NULL; p = p->ai_next){
@@ -155,7 +156,7 @@ void start_function(){
     sprintf(message, "%s %s\n", SNG, plid);
 
     if (game_ongoing == 1){
-        printf("Game already in progress.\n");
+        printf(ERR_ONGOING_GAME);
     } else {
         message_udp(message);
     }
@@ -170,7 +171,9 @@ void play_function(){
     message = malloc(13 + strlen(trial_str));
 
     scanf("%s", current_game.last_letter);
+    current_game.last_letter[0] = current_game.last_letter[0] - 'a' + 'A';
     sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter, current_game.trial);
+    printf("%s", message);
 
     message_udp(message);
     free(message);
@@ -183,6 +186,9 @@ void guess_function(){
 
     sprintf(trial_str, "%d", current_game.trial);
     scanf("%s", current_game.word_guessed);
+    for (int i = 0; i < strlen(current_game.word_guessed); i++){
+        current_game.word_guessed[i] = current_game.word_guessed[i] - 'a' + 'A';
+    }
 
     message = malloc(12 + strlen(current_game.word_guessed) + strlen(trial_str));
 
@@ -198,15 +204,24 @@ void scoreboard_function(){
 
 void hint_function(){
     char message[12];
-    sprintf(message, "%s %s\n", GHL, plid);
-    message_tcp(message);
+
+    if (game_ongoing == 0){
+        printf(ERR_NO_GAME);
+    } else {
+        sprintf(message, "%s %s\n", GHL, plid);
+        message_tcp(message);
+    }
 }
 
 void state_function(){
     char message[12];
-    // TO DO: check if plid is empty
-    sprintf(message, "%s %s\n", STA, plid);
-    message_tcp(message);
+
+    if (strcmp(plid, "") == 0){
+        printf(ERR_NO_PLID);
+    } else {
+        sprintf(message, "%s %s\n", STA, plid);
+        message_tcp(message);
+    }
 }
 
 // function to send a message to the server to quit the game
@@ -233,8 +248,17 @@ void message_udp(char *buffer){
     char response[128];
 
     fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
-    if (fd == -1){
-        perror("socket error");
+    if (fd == -1) {
+        perror(ERR_SOCKET);
+        exit(1);
+    }
+
+    struct timeval opt = {5, 0}; // 5 seconds udp socket timeout
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char*) &opt, sizeof(opt)) < 0 ) {
+        perror("ERROR: setsockopt");
+        exit(1);
+    } if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char*) &opt, sizeof(opt)) < 0 ) {
+        perror("ERROR: setsockopt");
         exit(1);
     }
 
@@ -244,13 +268,13 @@ void message_udp(char *buffer){
 
     errcode = getaddrinfo(ip, port, &hints, &res);
     if (errcode != 0){
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
         exit(1);
     }
 
     n = sendto(fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen);
     if (n == -1){
-        perror("sendto error");
+        perror(ERR_SENDTO);
         exit(1);
     }
 
@@ -258,7 +282,7 @@ void message_udp(char *buffer){
     n = recvfrom(fd, response, 128, 0, (struct sockaddr *)&addr, &addrlen);
 
     if (n == -1){
-        perror("recvfrom error");
+        perror(ERR_RECVFROM);
         exit(1);
     }
 
@@ -284,7 +308,7 @@ void parse_response_udp(char *message){
             set_new_game(message);
         }
         else if (strcmp(status, NOK) == 0){
-            printf("Error: game already started\n");
+            printf(ERR_ONGOING_GAME);
         }
     }
 
@@ -297,10 +321,10 @@ void parse_response_udp(char *message){
         else if (strcmp(status, NOK) == 0){
             current_game.errors++;
             current_game.trial++;
-            printf("Error: The letter does not appear in current word\n");
+            printf(ERR_NO_MATCHES_CHAR);
         }
         else if (strcmp(status, DUP) == 0){
-            printf("Error: The letter has already been proposed\n");
+            printf(ERR_DUP_CHAR);
         }
 
         else if (strcmp(status, WIN) == 0){
@@ -311,15 +335,15 @@ void parse_response_udp(char *message){
         else if (strcmp(status, OVR) == 0){
             current_game.errors++;
             game_ongoing = 0;
-            printf("Error: Wrong letter and game over\n");
+            printf(ERR_WRONG_CHAR_GAMEOVER);
         }
 
         else if (strcmp(status, INV) == 0){
-            printf("Error: Trial number not valid or repeating last PLG stored at the GS with different letter\n");
+            printf(ERR_INVALID);
         }
 
         else if (strcmp(status, ERR) == 0){
-            printf("Error: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n");
+            printf(ERR_INVALID_2);
         }
     }
 
@@ -327,10 +351,10 @@ void parse_response_udp(char *message){
         if (strcmp(status, NOK) == 0){
             current_game.errors++;
             current_game.trial++;
-            printf("Error: The guess was incorrect!\n");
-        }
-
-        else if (strcmp(status, WIN) == 0){
+            printf(ERR_WRONG_GUESS);
+        } else if (strcmp(status, DUP) == 0) {
+            printf(ERR_DUP_GUESS);
+        } else if (strcmp(status, WIN) == 0){
             win_word_function();
             game_ongoing = 0;
         }
@@ -338,15 +362,15 @@ void parse_response_udp(char *message){
         else if (strcmp(status, OVR) == 0){
             current_game.errors++;
             game_ongoing = 0;
-            printf("Error: Wrong word and game over\n");
+            printf(ERR_WRONG_GUESS_GAMEOVER);
         }
 
         else if (strcmp(status, INV) == 0){
-            printf("Error: Trial number not valid or repeating last PLG stored at the GS with different letter\n");
+            printf(ERR_INVALID);
         }
 
         else if (strcmp(status, ERR) == 0){
-            printf("Error: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n");
+            printf(ERR_INVALID_2 );
         }
     }
 
@@ -355,7 +379,7 @@ void parse_response_udp(char *message){
             printf("Game over\n");
         }
         else if (strcmp(status, ERR) == 0){
-            printf("Error: There's no ongoing game for the specified player PLID\n");
+            printf(ERR_NO_GAME);
         }
     }
 
@@ -372,14 +396,12 @@ void parse_response_udp(char *message){
             printf("Error: There's no ongoing game for the specified player PLID\n");
         }
         */
-    }
+    } else if (strcmp(code, ERR) == 0){
 
-    else if (strcmp(code, ERR) == 0){
-        printf("Error: unexpected protocol message received\n");
-    }
+        printf(ERR_PROTOCOL);
+    } else {
 
-    else{
-        printf("An error occurred\n");
+        printf(ERR_UNKNOWN_CODE);
     }
 }
 
@@ -480,14 +502,14 @@ int read_buffer2string(int fd, char *buffer, char *string) {
     int bytes = 0;
     n = read(fd, buffer+bytes, 1);
     if (n <= 0) {
-        perror("read error");
+        perror(ERR_READ);
         exit(1);
     }
     while (buffer[bytes] != ' ') {
         bytes++;
         n = read(fd, buffer+bytes, 1);
         if (n <= 0) {
-            perror("read error");
+            perror(ERR_READ);
             exit(1);
         }
     }
@@ -502,6 +524,7 @@ char* get_file(int fd, char* code, char* status, char* response) {
 	char filesize_str[128];
     int filesize;
     int bytes = 0;
+    int to_read;
 
     // READ FILENAME
     bytes += read_buffer2string(fd, response, filename);
@@ -514,30 +537,37 @@ char* get_file(int fd, char* code, char* status, char* response) {
     FILE *fp = fopen(filename, "w");
     if (fp == NULL)
     {
-        perror("fopen error");
+        perror(ERR_OPEN_FILE);
         exit(1);
     }
 
     bytes = 0;
     while (bytes < filesize)
     {
-        n = read(fd, response+bytes, 1);
+        if (READ_AMOUNT > filesize - bytes)
+            to_read = filesize - bytes;
+        else
+            to_read = READ_AMOUNT;
+
+        n = read(fd, response+bytes, to_read);
         if (n <= 0)
         {
-            perror("read error");
+            perror(ERR_READ);
             exit(1);
         }
-        n = fwrite(response + bytes, 1, 1, fp);
+        n = fwrite(response + bytes, 1, n, fp);
         if (n <= 0)
         {
-            perror("fwrite error");
+            perror(ERR_WRITE_FILE);
             exit(1);
         }
-        bytes++;
+        bytes += n;
     }
     fclose(fp);
 
     sprintf(response, "%s %s %s %d", code, status, filename, filesize);
+
+    printf("File %s received (%d bytes) in current directory.\n", filename, filesize);
 
     return response;
 }
@@ -556,7 +586,16 @@ void message_tcp(char *buffer){
 
     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
     if (fd == -1){
-        perror("socket error");
+        perror(ERR_SOCKET);
+        exit(1);
+    }
+
+    struct timeval opt = {5, 0}; // 5 seconds udp socket timeout
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char*) &opt, sizeof(opt)) < 0 ) {
+        perror("ERROR: setsockopt");
+        exit(1);
+    } if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char*) &opt, sizeof(opt)) < 0 ) {
+        perror("ERROR: setsockopt");
         exit(1);
     }
 
@@ -566,13 +605,13 @@ void message_tcp(char *buffer){
 
     errcode = getaddrinfo(ip, port, &hints, &res);
     if (errcode != 0){
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
         exit(1);
     }
 
     n = connect(fd, res->ai_addr, res->ai_addrlen);
     if (n == -1){
-        perror("connect error");
+        perror(ERR_CONNECT);
         exit(1);
     }
 
@@ -581,7 +620,7 @@ void message_tcp(char *buffer){
     while (bytes < strlen(buffer)) {
         n = write(fd, buffer+bytes, strlen(buffer)-bytes);
         if (n <= 0) {
-            perror("write error");
+            perror(ERR_WRITE);
             exit(1);
         }
         bytes += n;
@@ -612,7 +651,7 @@ void parse_response_tcp(int fd, char *message){
         }
 
         else if (strcmp(status, EMPTY) == 0){
-            printf("Scoreboard is empty\n");
+            printf(WARN_EMPTY_SB);
         }
     }
 
@@ -622,7 +661,7 @@ void parse_response_tcp(int fd, char *message){
         }
 
         else if ((strcmp, NOK) == 0){
-            printf("Error: There's no file to be sent or some other problem occured\n");
+            printf(ERR_FILE_NOK);
         }
     }
 
@@ -632,16 +671,16 @@ void parse_response_tcp(int fd, char *message){
         }
 
         else if (strcmp(status, NOK) == 0){
-            printf("Game server did not find any games\n");
+            printf(ERR_NO_GAMES_FOUND);
         }
     }
 
     else if (strcmp(code, ERR) == 0){
-        printf("Error: unexpected protocol message received\n");
+        printf(ERR_PROTOCOL);
     }
 
     else{
-        printf("An error occurred\n");
+        printf(ERR_UNKNOWN_CODE);
     }
 }
 
@@ -678,4 +717,3 @@ void game_status(int fd, char *message){
     // READ FILENAME, FILESIZE AND WRITE IMAGE
     get_file(fd, code, status, response);
 }
-
