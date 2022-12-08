@@ -21,8 +21,8 @@
 // DEFINES
 
 #define DEFAULT_SERVER "tejo.ist.utl.pt"
-#define DEFAULT_PORT "58011" // must be 58000 + Group Number but it isnt defined yet so using default for now
-#define GN "GN" // group number
+#define DEFAULT_PORT "58090" // must be 58000 + Group Number 
+#define GN 90 // group number
 
 #define START "start"
 #define SG "sg"
