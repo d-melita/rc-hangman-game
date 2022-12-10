@@ -15,10 +15,16 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <time.h>
 
 // DEFINES
 
-#define PORT "58090" // default port 58000 + GN (90)
+#define DEFAULT_PORT "58090" // must be 58000 + Group Number 
+#define GN 90 // group number
+#define MAX_ERRORS 8 // Maximum number of errors allowed
+
+#define MAX_GAMES 256 // Maximum number of games/matches at once
+#define WORDFILE_SIZE 5 // Conservative number of files in word file
 
 #define SNG "SNG"
 #define RSG "RSG"
@@ -48,7 +54,17 @@
 #define FIN "FIN"
 #define EMPTY "EMPTY"
 
+
+// ERRORS
+
+#define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
+#define ERR_INVALID_OPTION "ERROR: Invalid option\n"
+
+
 // prototypes
+struct game_data;
+struct game_id;
+
 void parse_args(int argc, char *argv[]);
 void message_udp();
 void parse_message_udp(char *message);
@@ -56,5 +72,11 @@ void start_new_game(char *message);
 void guess_letter(char *message);
 void guess_word(char *message);
 void quit(char *message);
+
+void play_letter(char *message);
+
+struct game_id* get_game(char* plid);
+int set_game_word(struct game_data* game_data);
+
 
 #endif
