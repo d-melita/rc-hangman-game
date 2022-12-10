@@ -5,6 +5,7 @@
 struct game_data {
   int trial;
   char *word;
+  char *class;
   int length;
   int errors;
   int max_errors;
@@ -280,6 +281,7 @@ void quit(char *message) {
 
     free(curr_game->game_data->word);
     free(curr_game->game_data->word_guessed);
+    free(curr_game->game_data->class);
     free(curr_game->game_data);
     free(curr_game);
 
@@ -293,6 +295,7 @@ void quit(char *message) {
 // Returns the length of the word
 int set_game_word(struct game_data *game_data) {
   char word[31];
+  char class[31];
   int i;
   int word_length;
   int random_number;
@@ -309,7 +312,7 @@ int set_game_word(struct game_data *game_data) {
 
   // get word from file
   for (i = 0; i <= random_number; i++) {
-    fscanf(fp, "%s", word);
+    fscanf(fp, "%s %s", word, class);
   }
 
   word_length = strlen(word);
@@ -317,7 +320,9 @@ int set_game_word(struct game_data *game_data) {
   // set game data
   game_data->length = word_length;
   game_data->word = malloc((word_length + 1) * sizeof(char));
+  game_data->class = malloc((strlen(class) + 1) * sizeof(char));
   strcpy(game_data->word, word);
+  strcpy(game_data->class, class);
   game_data->word_guessed = malloc((word_length + 1) * sizeof(char));
 
   for (i = 0; i < word_length; i++) {
