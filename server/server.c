@@ -6,11 +6,11 @@ struct game_data {
   int trial;
   char *word;
   char *class;
-  int length;
   int errors;
   int max_errors;
   char last_letter[2];
-  char *word_guessed;
+  int letters_guessed;
+  char letters_played[31]; // 30 max word size + \0
 };
 
 struct game_id {
@@ -84,6 +84,7 @@ void message_udp() {
   struct addrinfo hints, *res;
   struct sockaddr_in addr;
   char buf[256];
+  char *response;
   int num = 0;
 
   fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
@@ -122,63 +123,69 @@ void message_udp() {
     buf[n] = '\0';
 
     if (verbose == 1) {
-      printf("RECEIVED: '%s'\n", buf);
+      puts("New UDP message received");
+      printf("CLIENT IP: '%s';PORT: '%d'\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     }
 
-    parse_message_udp(buf);
-    n = sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&addr, addrlen);
+    response = parse_message_udp(buf);
+    n = sendto(fd, response, strlen(response), 0, (struct sockaddr *)&addr, addrlen);
     if (n == -1) {
       perror("sendto");
       exit(1);
     }
 
     if (verbose == 1) {
-      printf("SENT: '%s'\n", buf);
+      printf("SENT: '%s'\n", response);
     }
   }
+  free(response);
   close(fd);
 }
 
-void parse_message_udp(char *message) {
+char* parse_message_udp(char *message) {
   char code[4];
   sscanf(message, "%s", code);
 
   if (strcmp(code, SNG) == 0) {
     // start new game
-    start_new_game(message);
+    return start_new_game(message);
   }
 
   else if (strcmp(code, PLG) == 0) {
-    play_letter(message);
+    return play_letter(message);
   }
 
   else if (strcmp(code, PWG) == 0) {
     // guess word
-    guess_word(message);
+    return guess_word(message);
   }
 
   else if (strcmp(code, QUT) == 0) {
     // Quit game
-    quit(message);
+    return quit(message);
   }
 
   else {
     printf("ERROR: Invalid message code\n");
+    return NULL;
     // error
   }
 }
 
-void start_new_game(char *message) {
+char* start_new_game(char *message) {
   char code[4];
   char plid[7];
   char status[4];
   int word_length;
-  char response[256];
+  char* response;
+  response = (char*) malloc(256 * sizeof(char));
 
   sscanf(message, "%s %s", code, plid);
 
-  // FIND GAME WITH PLID
+  if (verbose == 1)
+    printf("Player %s requested a new game.\n", plid);
 
+  // FIND GAME WITH PLID
   struct game_id *curr_game = get_game(plid);
 
   if (curr_game == NULL) { // NO ACTIVE GAMES FOUND FOR PLAYER
@@ -186,6 +193,7 @@ void start_new_game(char *message) {
     curr_game->game_data = malloc(sizeof(struct game_data));
     curr_game->next = NULL;
     strcpy(curr_game->plid, plid);
+
     if (game == NULL) { // NO ACTIVE GAMES AT ALL
       curr_game->prev = NULL;
       game = curr_game;
@@ -193,23 +201,99 @@ void start_new_game(char *message) {
 
     word_length = set_game_word(curr_game->game_data);
     strcpy(status, OK);
-  } else // PLAYER HAS AN ONGOING GAME
-    strcpy(status, NOK);
 
-  if (strcmp(status, OK) == 0) {
-    sprintf(message, "%s %s %d %d", RSG, status, word_length, MAX_ERRORS);
-  } else
-    sprintf(message, "%s %s", RSG, status);
+    sprintf(response, "%s %s %d %d\n", RSG, status, word_length, MAX_ERRORS);
+
+    printf("New game started for %s with word: '%s'\n", plid, curr_game->game_data->word);
+  } else { // PLAYER HAS AN ONGOING GAME
+    strcpy(status, NOK);
+    sprintf(response, "%s %s\n", RSG, status);
+  }
+  
+  return response;
 }
 
-void play_letter(char *message) {
+char* play_letter(char *message) {
+  char status[4];
   char code[4];
   char plid[7];
   char letter[2];
   int trial;
-  char status[4];
+  char* buffer;
+  buffer = (char*) malloc(256 * sizeof(char));
 
-  sscanf(message, "%s %s %s %d", code, plid, letter, trial);
+  sscanf(message, "%s %s %s %d\n", code, plid, letter, &trial);
+
+  if (verbose == 1)
+    printf("Player %s requested to play letter %s.\n", plid, letter);
+
+  struct game_id *game_id = get_game(plid);
+  if (game_id != NULL) {          // 1: THERES AN ACTIVE GAME FOR PLAYER
+    struct game_data *game = game_id->game_data;
+
+    if (trial != game->trial) {   // 2: TRIAL NUMBER DOESNT MATCH -> INV
+
+      if (trial == game->trial-1 &&
+       strcmp(game->last_letter, letter) == 0) // TODO
+        return NULL; // RESEND LAST PLAY RESPONSE TODO
+      else {
+        strcpy(status, INV);
+        sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
+      }
+
+                                  // 3: LETTER ALREADY PLAYED -> DUP
+    } else if (letter_in_word(game->letters_played, letter)) {
+      
+      strcpy(status, DUP);
+      sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
+
+    } else {
+
+                                  // 4: LETTER IS IN WORD -> OK
+      if (letter_in_word(game->word, letter)) {
+        char pos_str[31] = "";
+        int n = 0;
+
+        strcpy(status, OK);
+        for (int i = 0; i < strlen(game->word); i++) {
+          if (game->word[i] == letter[0]) {
+            sprintf(pos_str, "%s %d", pos_str, i+1);
+            game->letters_guessed++;
+            n++;
+          }
+        }
+        puts(pos_str);
+
+        // 4.1: WORD IS GUESSED -> WIN
+        if (game->letters_guessed == strlen(game->word)) {
+          strcpy(status, WIN);
+          // TODO
+        }
+
+        sprintf(buffer, "%s %s %d %d%s\n", RLG, status, game->trial++, n, pos_str);
+
+      // 5: LETTER IS NOT IN WORD -> NOK
+      } else {
+        strcpy(status, NOK);
+        game->errors++;
+
+        // 5.1: MAX ERRORS REACHED -> OVR
+        if (game->errors == game->max_errors) {
+          strcpy(status, OVR);
+          // TODO
+        }
+
+        sprintf(buffer, "%s %s %d\n", RLG, status, game->trial++);
+      }
+
+    }
+
+  } else {
+    strcpy(status, ERR);
+    sprintf(buffer, "%s %s\n", RLG, status);
+  }
+
+  return buffer;
 
   // if letter is in word, strcpy(status, OK); give number of occurences and
   // positions
@@ -232,7 +316,7 @@ void play_letter(char *message) {
   // send message to client
 }
 
-void guess_word(char *message) {
+char* guess_word(char *message) {
   char code[4];
   char plid[7];
   char word[31];
@@ -240,6 +324,9 @@ void guess_word(char *message) {
   char status[4];
 
   sscanf(message, "%s %s %s %d", code, plid, word, trial);
+
+  if (verbose == 1)
+    printf("Player %s sent a guess.\n", plid);
 
   // if word == guessed, strcpy(status, WIN);
 
@@ -258,38 +345,32 @@ void guess_word(char *message) {
   // send message to client
 }
 
-void quit(char *message) {
+char* quit(char *message) {
   char code[4];
   char plid[7];
   char status[4];
+  char* buffer;
+  buffer = (char*) malloc(256 * sizeof(char));
 
   sscanf(message, "%s %s", code, plid);
+
+  if (verbose == 1)
+    printf("Player %s requested to quit the game.\n", plid);
 
   struct game_id *curr_game = get_game(plid);
   if (curr_game == NULL) { // NO ACTIVE GAMES FOUND FOR PLAYER
     printf("DEBUG: No active games found for player\n");
 
     strcpy(status, ERR);
-  } else {                       // ACTIVE GAME FOUND
-    if (curr_game->prev == NULL) // GAME IS FIRST IN LIST
-      game = curr_game->next;
-    else
-      curr_game->prev->next = curr_game->next;
-
-    if (curr_game->next != NULL) // GAME IS NOT LAST IN LIST
-      curr_game->next->prev = curr_game->prev;
-
-    free(curr_game->game_data->word);
-    free(curr_game->game_data->word_guessed);
-    free(curr_game->game_data->class);
-    free(curr_game->game_data);
-    free(curr_game);
+  } else { // ACTIVE GAME FOUND
+    delete_game(curr_game); // DELETE GAME
 
     strcpy(status, OK);
   }
 
-  sprintf(message, "%s %s", RQT, status);
+  sprintf(buffer, "%s %s\n", RQT, status);
   // send message to client
+  return buffer;
 }
 
 // Returns the length of the word
@@ -318,18 +399,23 @@ int set_game_word(struct game_data *game_data) {
   word_length = strlen(word);
 
   // set game data
-  game_data->length = word_length;
   game_data->word = malloc((word_length + 1) * sizeof(char));
   game_data->class = malloc((strlen(class) + 1) * sizeof(char));
   strcpy(game_data->word, word);
   strcpy(game_data->class, class);
-  game_data->word_guessed = malloc((word_length + 1) * sizeof(char));
+  
+  if (word_length < 7)
+    game_data->max_errors = 7;
+  else if (word_length < 11)
+    game_data->max_errors = 8;
+  else
+    game_data->max_errors = 9;
 
-  for (i = 0; i < word_length; i++) {
-    game_data->word_guessed[i] = '_';
-  }
   game_data->errors = 0;
-  game_data->trial = 0;
+  game_data->trial = 1;
+  game_data->letters_guessed = 0;
+  strcpy(game_data->last_letter, "");
+  strcpy(game_data->letters_played, "");
 
   fclose(fp);
   return word_length;
@@ -345,4 +431,29 @@ struct game_id *get_game(char *plid) {
   }
 
   return NULL;
+}
+
+// Function which checks if letter has already been played
+int letter_in_word(char *letters_guessed, char *letter) {
+  int i;
+  for (i = 0; i < strlen(letters_guessed); i++) {
+    if (letters_guessed[i] == letter[0])
+      return 1;
+  }
+  return 0;
+}
+
+void delete_game(struct game_id *curr_game) {
+  if (curr_game->prev == NULL) // GAME IS FIRST IN LIST
+    game = curr_game->next;
+  else
+    curr_game->prev->next = curr_game->next;
+
+  if (curr_game->next != NULL) // GAME IS NOT LAST IN LIST
+    curr_game->next->prev = curr_game->prev;
+
+  free(curr_game->game_data->word);
+  free(curr_game->game_data->class);
+  free(curr_game->game_data);
+  free(curr_game);
 }

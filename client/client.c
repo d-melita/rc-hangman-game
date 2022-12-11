@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
     else {
       printf(ERR_INVALID_CMD);
     }
+
     n = scanf("%s", command);
     if (n == EOF || n == 0) {
       exit(1); // EOF or no input
@@ -145,6 +146,7 @@ void get_ip_known_host(char *host) {
 
   if ((errcode = getaddrinfo(host, NULL, &hints, &res)) != 0) {
     fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
+    exit(1);
   } else {
     for (p = res; p != NULL; p = p->ai_next) {
       addr = &((struct sockaddr_in *)p->ai_addr)->sin_addr;
@@ -303,13 +305,17 @@ int select_socket(int fd, int readWrite, int timeout) {
     perror(ERR_SELECT);
     exit(1);
   case 0:
-    perror(ERR_TIMEOUT);
-    exit(1);
-  default:
-    if (FD_ISSET(fd, &ready_sockets)) {
-      return 0;
-    } else {
-      perror(ERR_SELECT); // Not sure what i should do here tbqh
+    puts(ERR_TIMEOUT);
+    return 1;
+  case 1:
+    int so_error;
+    socklen_t len = sizeof so_error;
+
+    getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &len);
+
+    if (so_error != 0) {
+      // socket has a non zero error status
+      puts(ERR_SOCKET);
       exit(1);
     }
   }
@@ -322,6 +328,7 @@ void message_udp(char *buffer) {
   struct addrinfo hints, *res;
   struct sockaddr_in addr;
   char response[128];
+
 
   fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
   if (fd == -1) {
@@ -340,24 +347,24 @@ void message_udp(char *buffer) {
     exit(1);
   }
 
-  select_socket(fd, 0, 5);
-  // Wait for 5 seconds for the socket to be ready to write
-
   n = sendto(fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen);
-  if (n == -1) {
+  if (n == -1) {  // CHECK IF CONNECTION DROPPED LOCALLY OR ETC
     perror(ERR_SENDTO);
-    exit(1);
+    puts(ERR_CONNECTION);
+    return;
   }
 
-  select_socket(fd, 1, 5);
-  // Wait for 5 seconds for the socket to be ready to read
+  // Wait <time>, to get response (server might've lost connection)
+  n = select_socket(fd, 1, 5);
+  if (n == 1)
+    return;
 
   addrlen = sizeof(addr);
   n = recvfrom(fd, response, 128, 0, (struct sockaddr *)&addr, &addrlen);
-
-  if (n == -1) {
+  if (n == -1) {  // CHECK IF CONNECTION DROPPED LOCALLY OR ETC
     perror(ERR_RECVFROM);
-    exit(1);
+    puts(ERR_CONNECTION);
+    return;
   }
 
   response[n] = '\0';
@@ -372,6 +379,8 @@ void parse_response_udp(char *message) {
   char code[4];
   char status[4];
   char *word;
+
+  printf("'%s'\n", message);
 
   // scan the message and get the code and status
   sscanf(message, "%s %s", code, status);
@@ -671,9 +680,11 @@ void message_tcp(char *buffer) {
     exit(1);
   }
 
+
   // Set socket to non-blocking, to check for connection timeout
   fcntl(fd, F_SETFL, O_NONBLOCK);
   // Attempt connection
+
   n = connect(fd, res->ai_addr, res->ai_addrlen);
   if (n == -1) {
     if (errno != EINPROGRESS) {
@@ -681,7 +692,12 @@ void message_tcp(char *buffer) {
       exit(1);
     }
   }
-  select_socket(fd, 0, 5); // Check socket's available for writing
+
+  n = select_socket(fd, 0, 5); // Check socket's available for writing
+  if (n == 1) {
+    fprintf(stderr, ERR_TIMEOUT);
+    return;
+  }
   socklen_t len = sizeof errcode;
 
   getsockopt(fd, SOL_SOCKET, SO_ERROR, &errcode, &len);
@@ -690,6 +706,7 @@ void message_tcp(char *buffer) {
   }
   // Reset socket to blocking
   fcntl(fd, F_SETFL, 0);
+
 
   // Send message to server
   bytes = 0;
@@ -702,7 +719,7 @@ void message_tcp(char *buffer) {
     bytes += n;
   }
 
-  select_socket(fd, 1, 5); // Check socket's available for writing
+  select_socket(fd, 1, 5); // Check socket's available for writing // TODO
 
   // READ CODE
   read_buffer2string(fd, response, code);

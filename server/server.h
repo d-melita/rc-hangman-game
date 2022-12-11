@@ -67,16 +67,18 @@ struct game_id;
 
 void parse_args(int argc, char *argv[]);
 void message_udp();
-void parse_message_udp(char *message);
-void start_new_game(char *message);
-void guess_letter(char *message);
-void guess_word(char *message);
-void quit(char *message);
+char* parse_message_udp(char *message);
+char* start_new_game(char *message);
+char* guess_letter(char *message);
+char* guess_word(char *message);
+char* quit(char *message);
 
-void play_letter(char *message);
+char* play_letter(char *message);
 
 struct game_id* get_game(char* plid);
 int set_game_word(struct game_data* game_data);
+int letter_in_word(char* word, char* letter);
+void delete_game(struct game_id* game_id);
 
 
 #endif
