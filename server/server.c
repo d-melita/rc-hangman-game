@@ -10,7 +10,9 @@ struct game_data {
   int max_errors;
   char last_letter[2];
   int letters_guessed;
+  char last_word[31];
   char letters_played[31]; // 30 max word size + \0
+  struct guessed_word *guessed_words;
 };
 
 struct game_id {
@@ -18,6 +20,11 @@ struct game_id {
   struct game_data *game_data;
   struct game_id *next;
   struct game_id *prev;
+};
+
+struct guessed_word {
+  char *word;
+  struct guessed_word *prev;
 };
 
 struct game_id *game = NULL;
@@ -41,12 +48,12 @@ int main(int argc, char *argv[]) {
 // Parse the arguments given to the program (host and port)
 void parse_args(int argc, char *argv[]) {
   // Two arguments, -v and -p
-  if (argc == 1) { // case 1
+  if (argc == 2) { // case 1
 
     strcpy(port, DEFAULT_PORT);
 
   } else {
-    for (int i = 1; i < argc; i++) { // Parse each given option and argument
+    for (int i = 2; i < argc; i++) { // Parse each given option and argument
 
       if (strcmp(argv[i], "-v") == 0) { // Host option (-n)
         // SET VERBOSE
@@ -262,7 +269,6 @@ char* play_letter(char *message) {
             n++;
           }
         }
-        puts(pos_str);
 
         // 4.1: WORD IS GUESSED -> WIN
         if (game->letters_guessed == strlen(game->word)) {
@@ -285,7 +291,7 @@ char* play_letter(char *message) {
 
         sprintf(buffer, "%s %s %d\n", RLG, status, game->trial++);
       }
-
+      strcpy(game->last_letter, letter);
     }
 
   } else {
@@ -294,26 +300,6 @@ char* play_letter(char *message) {
   }
 
   return buffer;
-
-  // if letter is in word, strcpy(status, OK); give number of occurences and
-  // positions
-
-  // else if letter is in word and word == guessed, strcpy(status, WIN);
-
-  // else if letter is not in word & errors++ != max_errors, strcpy(status,
-  // NOK);
-
-  // else if letter is not in word & errors++ == max_errors, strcpy(status, OVR)
-  // and end game;
-
-  // else if letter sent on a previous trial, strcpy(status, DUP);
-
-  // else if trial != trial, strcpy(status, INV);
-
-  // check on going game
-  // if no on going game, strcpy(status, ERR);
-
-  // send message to client
 }
 
 char* guess_word(char *message) {
@@ -322,27 +308,67 @@ char* guess_word(char *message) {
   char word[31];
   int trial;
   char status[4];
+  char *buffer;
+  buffer = (char*) malloc(256 * sizeof(char));
 
-  sscanf(message, "%s %s %s %d", code, plid, word, trial);
+  sscanf(message, "%s %s %s %d", code, plid, word, &trial);
 
-  if (verbose == 1)
-    printf("Player %s sent a guess.\n", plid);
+  if (verbose == 1){
+    printf("Player %s sent a guess: %s.\n", plid, word);
+  }
 
-  // if word == guessed, strcpy(status, WIN);
+  struct game_id *game_id = get_game(plid);
+  if (game_id != NULL){
+    struct game_data *game = game_id->game_data;
+    if (trial != game->trial){
+      if (trial == game->trial-1 && strcmp(game->last_word, word) == 0){
+        return NULL; // RESEND LAST GUESS RESPONSE
+      }
+      else{
+        strcpy(status, INV);
+        sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
+      }
+    }
+    else if (word_played(word, game->guessed_words) == 1){
+      strcpy(status, DUP);
+      sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
+    }
 
-  // else if word != guessed & errors++ != max_errors, strcpy(status, NOK);
+    else{
 
-  // else if word != guessed & errors++ == max_errors, strcpy(status, OVR) and
-  // end game;
+      if (strcmp(game->word, word) == 0){
+        strcpy(status, WIN);
+        sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
+      }
+      else{
+        game->errors++;
 
-  // else if word sent on a previous trial, strcpy(status, DUP);
+        if (game->errors == game->max_errors){
+          strcpy(status, OVR);
+        }
 
-  // else if trial != trial, strcpy(status, INV);
+        else{
+          strcpy(status, NOK);
+        }
 
-  // check on going game
-  // if no on going game, strcpy(status, ERR);
+        sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
+      }
 
-  // send message to client
+      strcpy(game->last_word, word);
+      // add word to guessed_words and link them
+      strcpy(game->guessed_words->word, word);
+      struct guessed_word *next_word = (struct guessed_word*) malloc(sizeof(struct guessed_word));
+      next_word->word = (char*) malloc(256 * sizeof(char));
+      next_word->prev = game->guessed_words;
+      game->guessed_words = next_word;
+    }
+  }
+  else{
+    strcpy(status, ERR);
+    sprintf(buffer, "%s %s\n", RWG, status);
+  }
+  return buffer;
+  //TODO IMPLEMENT DUP CASE - CHOOSE BETWEEN STRUCT OR FILE
 }
 
 char* quit(char *message) {
@@ -401,6 +427,10 @@ int set_game_word(struct game_data *game_data) {
   // set game data
   game_data->word = malloc((word_length + 1) * sizeof(char));
   game_data->class = malloc((strlen(class) + 1) * sizeof(char));
+  game_data->guessed_words = malloc(sizeof(struct guessed_word));
+  game_data->guessed_words->prev = NULL;
+  game_data->guessed_words->word = malloc((256) * sizeof(char));
+
   strcpy(game_data->word, word);
   strcpy(game_data->class, class);
   
@@ -456,4 +486,14 @@ void delete_game(struct game_id *curr_game) {
   free(curr_game->game_data->class);
   free(curr_game->game_data);
   free(curr_game);
+}
+
+int word_played(char *word, struct guessed_word *guessed_words) {
+
+  while (guessed_words->prev != NULL) {
+    if (strcmp(guessed_words->word, word) == 0)
+      return 1;
+    guessed_words = guessed_words->prev;
+  }
+  return 0;
 }

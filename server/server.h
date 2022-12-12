@@ -64,6 +64,7 @@
 // prototypes
 struct game_data;
 struct game_id;
+struct guessed_word;
 
 void parse_args(int argc, char *argv[]);
 void message_udp();
@@ -79,6 +80,7 @@ struct game_id* get_game(char* plid);
 int set_game_word(struct game_data* game_data);
 int letter_in_word(char* word, char* letter);
 void delete_game(struct game_id* game_id);
+int word_played(char* word, struct guessed_word* guessed_words);
 
 
 #endif
