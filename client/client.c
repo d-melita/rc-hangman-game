@@ -18,15 +18,7 @@ struct current_game {
 struct current_game current_game;
 
 int main(int argc, char *argv[]) {
-  struct sigaction act;
-  memset(&act,0,sizeof act);
-  act.sa_handler=SIG_IGN;
-
-  if(sigaction(SIGPIPE,&act,NULL)==-1)
-  {
-    perror("sigaction");
-    exit(1);
-  }
+  signal(SIGPIPE, handler); // Ignore SIGPIPE (broken pipe)
   signal(SIGINT, handler);
   
 
@@ -72,6 +64,8 @@ int main(int argc, char *argv[]) {
 
     else {
       printf(ERR_INVALID_CMD);
+      // Clear stdin until newline using something other than getchar
+      while (getchar() != '\n');
     }
 
     n = scanf("%s", command);
@@ -164,20 +158,31 @@ void start_function() {
 
   char message[12];
 
-  n = scanf("%s", t_plid);
+  n = scanf("%6s", t_plid);
   if (n == EOF || n == 0) {
     perror(ERR_SCANF);
     exit(1); // EOF or no input
   }
 
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    return;
+  }
+
   if (game_ongoing == 1) {
     printf(ERR_ONGOING_GAME);
-  } else {
-    strcpy(plid, t_plid);
-    sprintf(message, "%s %s\n", SNG, plid);
-
-    message_udp(message);
+    return;
   }
+
+  if (strlen(t_plid) != 6) {
+    printf(ERR_INVALID_PLID);
+    return;
+  }
+
+  strcpy(plid, t_plid);
+  sprintf(message, "%s %s\n", SNG, plid);
+
+  message_udp(message);
 }
 
 // Send play message to server.
@@ -199,6 +204,12 @@ void play_function() {
           current_game.trial);
   printf("%s", message);
 
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    free(message);
+    return;
+  }
+
   message_udp(message);
   free(message);
 }
@@ -215,6 +226,12 @@ void guess_function() {
   if (n == EOF || n == 0) {
     exit(1); // EOF or no input
   }
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    free(message);
+    return;
+  }
+
   for (int i = 0; i < strlen(current_game.word_guessed); i++) {
     current_game.word_guessed[i] = current_game.word_guessed[i] - 'a' + 'A';
   }
@@ -228,33 +245,57 @@ void guess_function() {
   free(message);
 }
 
-void scoreboard_function() { message_tcp(GSB); }
+void scoreboard_function() { 
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    return;
+  }
+
+  message_tcp(GSB);
+}
 
 void hint_function() {
   char message[12];
 
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    return;
+  }
+
   if (game_ongoing == 0) {
     printf(ERR_NO_GAME);
-  } else {
-    sprintf(message, "%s %s\n", GHL, plid);
-    message_tcp(message);
+    return;
   }
+
+  sprintf(message, "%s %s\n", GHL, plid);
+  message_tcp(message);
 }
 
 void state_function() {
   char message[12];
 
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    return;
+  }
+
   if (strcmp(plid, "") == 0) {
     printf(ERR_NO_PLID);
-  } else {
-    sprintf(message, "%s %s\n", STA, plid);
-    message_tcp(message);
+    return;
   }
+
+  sprintf(message, "%s %s\n", STA, plid);
+  message_tcp(message);
 }
 
 // Notify the server to quit the current game.
 void quit_function() {
   char message[12];
+
+  if (clear_input() == 1) {
+    puts(ERR_INVALID_ARGS);
+    return;
+  }
 
   if (game_ongoing == 0) {
     printf(ERR_NO_GAME);
@@ -300,7 +341,7 @@ int select_socket(int fd, int readWrite, int timeout) {
     exit(1);
   }
 
-  switch (out_fd) {
+  switch (out_fd) { // check the return value of select
   case -1:
     perror(ERR_SELECT);
     exit(1);
@@ -318,6 +359,10 @@ int select_socket(int fd, int readWrite, int timeout) {
       puts(ERR_SOCKET);
       exit(1);
     }
+    return 0;
+  default:
+    printf("ERROR: select returned %d\n", out_fd);
+    exit(1);
   }
 }
 
@@ -601,7 +646,7 @@ int read_buffer2string(int fd, char *buffer, char *string) {
   return bytes;
 }
 
-char *get_file(int fd, char *code, char *status, char *response) {
+void get_file(int fd, char *code, char *status, char *response) {
   int n, errcode;
   char filename[128];
   char filesize_str[128];
@@ -648,8 +693,6 @@ char *get_file(int fd, char *code, char *status, char *response) {
 
   printf("File %s received (%d bytes) in current directory.\n", filename,
          filesize);
-
-  return response;
 }
 
 void message_tcp(char *buffer) {
@@ -813,11 +856,25 @@ void game_status(int fd, char *message) {
 }
 
 static void handler(int signum) {
-  if (signum == SIGINT) {
-    printf("SIGINT Received, cleanly closing client...\n");
-    exit(0);
-  } else {
-    printf("Unknown signal received\n");
-    exit(0);
+  switch (signum) {
+  case SIGINT:
+    printf("\nClosing Signal Received...\n");
+    exit(1);
+  case SIGPIPE:
+    printf("\nBroken Pipe Signal Received...\n");
+    exit(1);
+  default:
+    printf("\nIgnoring unexpected signal...\n");
   }
+}
+
+int clear_input() {
+  int c;
+  int ret = 0;
+
+  while ((c = getchar()) != '\n') {
+    if (c != ' ' && c != '\t')
+      ret = 1;
+  }
+  return ret;
 }

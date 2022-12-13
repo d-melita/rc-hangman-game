@@ -164,8 +164,8 @@ int read_buffer2string(int fd, char *buffer, char *string);
 /// \param status response status
 /// \param response response message (with file)
 ///
-/// \returns pointer to response message
-char* get_file(int fd, char* code, char* status, char* response);
+/// \returns void
+void get_file(int fd, char* code, char* status, char* response);
 
 /// Set a given signal to be handled by handler function.
 ///
@@ -181,5 +181,11 @@ static void handler(int signum);
 ///
 /// \returns 0 on success
 int select_socket(int fd, int readWrite, int timeout);
+
+/// Function to clear stdin.
+///
+/// \returns 1 if any characters other than spaces or tabulations
+/// are found, 0 otherwise
+int clear_input();
 
 #endif  
