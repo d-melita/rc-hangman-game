@@ -769,5 +769,73 @@ char* parse_tcp(char *message, int fd){
   }
 }
 
-char* get_hint(char* plid) { return NULL; }
+char* get_hint(char* plid){
+  char status[4];
+  char st_filename[64];
+  char *reply;
+  sprintf(st_filename, "GAMES/STATUS_%s.txt", plid);
+
+  FILE *fp = fopen(st_filename, "r"); // Open file with game status
+  if (fp == NULL) {
+    perror("fopen");
+    exit(1);
+  }
+
+  char game_status[6];
+  char word[31];
+  char word_file[64];
+  char word_status[31];
+  fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status);
+  fclose(fp);
+
+  // get file with word_file name
+
+  char *filename = (char*) malloc(strlen("WORDS/") + strlen(word_file) + 1);
+  sprintf(filename, "WORDS/%s", word_file);
+
+  printf("File name: %s\n", filename);
+
+  fp = fopen(filename, "r");
+  if (access(filename, F_OK) == -1 || access(filename, R_OK) == -1) {
+    puts("File does not exist");
+    reply = (char*)malloc(strlen(RHL) + strlen(NOK) + 2);
+    sprintf(reply, "%s %s\n", RHL, NOK);
+    return reply;
+  }
+
+  // get filename size
+  fseek(fp, 0, SEEK_END);
+  long fsize = ftell(fp);
+
+  // go back to the beginning of the file
+  fseek(fp, 0, SEEK_SET);
+
+  // get file content
+
+  char *file = (char*)malloc(fsize + 1);
+  long bytes_left = fsize;
+  long bytes_read = 0;
+  int n = 0;
+  while (bytes_read < fsize) {
+    if (256 > fsize - bytes_read)
+      bytes_left = fsize - bytes_read;
+    else
+      bytes_left = 256;
+
+    n = read(fileno(fp), file + bytes_read, bytes_left);
+    if (n <= 0) {
+      perror("read");
+      exit(1);
+    }
+    bytes_read += n;
+  }
+
+  reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize + strlen(file) + 2);
+  sprintf(reply, "%s %s %s %ld %s\n", RHL, OK, word_file, fsize, file);
+
+  printf("Reply: %s %ld\n", word_file, fsize);
+  puts(file);
+  return reply;
+
+}
 char* get_scoreboard() { return NULL; }

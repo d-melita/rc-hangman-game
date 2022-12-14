@@ -662,6 +662,7 @@ void get_file(int fd, char *code, char *status, char *response) {
   filesize = atoi(filesize_str);
 
   puts(filename);
+  printf("%d\n", filesize);
   // READ AND WRITE IMAGE
   FILE *fp = fopen(filename, "w");
   if (fp == NULL) {
@@ -669,15 +670,19 @@ void get_file(int fd, char *code, char *status, char *response) {
     exit(1);
   }
 
+  puts("aaaa");
+
   bytes = 0;
   while (bytes < filesize) {
     if (READ_AMOUNT > filesize - bytes)
       to_read = filesize - bytes;
     else
       to_read = READ_AMOUNT;
-
+    puts("bbbb");
     n = read(fd, response + bytes, to_read);
+    printf("%d\n", n);
     if (n <= 0) {
+      puts("ccccc");
       perror(ERR_READ);
       exit(1);
     }
