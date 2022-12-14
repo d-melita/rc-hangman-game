@@ -51,8 +51,19 @@ int main(int argc, char *argv[]) {
   if (verbose)
     printf("Verbose mode enabled\n");
 
-  fork();
-  message_udp();
+  int pid = fork();
+
+  if (pid == 0) {
+    // Child process
+    message_tcp();
+  } else if (pid > 0) {
+    // Parent process
+    message_udp();
+  } else {
+    // Error
+    perror("fork");
+    exit(1);
+  }
 
   return 0;
 }
@@ -624,4 +635,92 @@ char* state(game_id *game) {
 
   fclose(pl);
   return out;
+}
+
+void message_tcp() {
+  int fd, newfd, errcode;
+  ssize_t n;
+  socklen_t addrlen;
+  struct sockaddr_in addr;
+  struct addrinfo hints, *res;
+  char buffer[256];
+  char *response;
+
+  fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
+  if (fd == -1) {
+    perror("socket");
+    exit(1);
+  }
+
+  memset(&hints, 0, sizeof(struct addrinfo));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE;
+
+  errcode = getaddrinfo(NULL, port, &hints, &res);
+  if (errcode != 0) {
+    perror("getaddrinfo");
+    exit(1);
+  }
+
+  n = bind(fd, res->ai_addr, res->ai_addrlen);
+  if (n == -1) {
+    perror("bind");
+    exit(1);
+  }
+
+  if (listen(fd, 5) == -1) {
+    perror("listen");
+    exit(1);
+  }
+
+  while (1){
+    addrlen = sizeof(addr);
+
+    if ((newfd = accept(fd, (struct sockaddr *)&addr, &addrlen)) == -1) {
+      perror("accept");
+      exit(1);
+    }
+
+    n = read(newfd, buffer, 256);
+    if (n == -1) {
+      perror("read");
+      exit(1);
+    }
+
+    response = parse_tcp(buffer, newfd);
+
+    // send message to client
+
+    close(newfd);
+  }
+
+  close(fd);
+  freeaddrinfo(res);
+}
+
+char* parse_tcp(char *message, int fd){
+  char code[4];
+  char plid[7];
+
+  sscanf(message, "%s", code);
+
+  if (strcmp(code, GSB) == 0){
+    return get_scoreboard();
+  }
+
+  else if(strcmp(code, GHL) == 0){
+    sscanf(message, "%s %s", code, plid);
+    return get_hint(plid);
+  }
+
+  else if(strcmp(code, STA) == 0){
+    sscanf(message, "%s %s", code, plid);
+    return state(get_game(plid));
+  }
+
+  else{
+    puts("Invalid command");
+    return ERR;
+  }
 }

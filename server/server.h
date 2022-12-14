@@ -84,6 +84,6 @@ int letter_in_word(char* word, char* letter);
 void delete_game(struct game_id* game_id);
 int word_played(char* word, struct guessed_word* guessed_words);
 void update_game_status(struct game_id *game, char* attempt);
-
+char* parse_tcp(char *message, int fd);
 
 #endif
