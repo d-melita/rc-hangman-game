@@ -630,14 +630,14 @@ int read_buffer2string(int fd, char *buffer, char *string) {
   int bytes = 0;
   n = read(fd, buffer + bytes, 1);
   if (n <= 0) {
-    perror(ERR_READ);
+    puts(ERR_READ);
     exit(1);
   }
-  while (buffer[bytes] != ' ') {
+  while ((buffer[bytes] != ' ') && (buffer[bytes] != '\n')) {
     bytes++;
     n = read(fd, buffer + bytes, 1);
     if (n <= 0) {
-      perror(ERR_READ);
+      puts(ERR_READ);
       exit(1);
     }
   }
@@ -661,6 +661,7 @@ void get_file(int fd, char *code, char *status, char *response) {
   bytes += read_buffer2string(fd, response, filesize_str);
   filesize = atoi(filesize_str);
 
+  puts(filename);
   // READ AND WRITE IMAGE
   FILE *fp = fopen(filename, "w");
   if (fp == NULL) {
@@ -723,33 +724,7 @@ void message_tcp(char *buffer) {
     exit(1);
   }
 
-
-  // Set socket to non-blocking, to check for connection timeout
-  fcntl(fd, F_SETFL, O_NONBLOCK);
-  // Attempt connection
-
   n = connect(fd, res->ai_addr, res->ai_addrlen);
-  if (n == -1) {
-    if (errno != EINPROGRESS) {
-      perror(ERR_CONNECT);
-      exit(1);
-    }
-  }
-
-  n = select_socket(fd, 0, 5); // Check socket's available for writing
-  if (n == 1) {
-    fprintf(stderr, ERR_TIMEOUT);
-    return;
-  }
-  socklen_t len = sizeof errcode;
-
-  getsockopt(fd, SOL_SOCKET, SO_ERROR, &errcode, &len);
-  if (errcode < 0) {
-    perror(ERR_CONNECT);
-  }
-  // Reset socket to blocking
-  fcntl(fd, F_SETFL, 0);
-
 
   // Send message to server
   bytes = 0;
@@ -761,9 +736,6 @@ void message_tcp(char *buffer) {
     }
     bytes += n;
   }
-
-  select_socket(fd, 1, 5); // Check socket's available for writing // TODO
-
   // READ CODE
   read_buffer2string(fd, response, code);
   // READ STATUS
