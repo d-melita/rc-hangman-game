@@ -23,9 +23,7 @@
 #define DEFAULT_PORT "58090" // must be 58000 + Group Number 
 #define GN 90 // group number
 #define MAX_ERRORS 8 // Maximum number of errors allowed
-
-#define MAX_GAMES 256 // Maximum number of games/matches at once
-#define WORDFILE_SIZE 5 // Conservative number of files in word file
+#define SIZE_WORDFILE 10
 
 #define SNG "SNG"
 #define RSG "RSG"
@@ -74,7 +72,6 @@ char* start_new_game(char *message);
 char* guess_letter(char *message);
 char* guess_word(char *message);
 char* quit(char *message);
-char* state(struct game_id *game);
 
 char* play_letter(char *message);
 
@@ -83,7 +80,12 @@ int set_game_word(struct game_data* game_data);
 int letter_in_word(char* word, char* letter);
 void delete_game(struct game_id* game_id);
 int word_played(char* word, struct guessed_word* guessed_words);
-void update_game_status(struct game_id *game, char* attempt);
+void update_game_status(struct game_id *game, char* attempt, char* status);
+
+void message_tcp();
+char* state(char* plid);
 char* parse_tcp(char *message, int fd);
+char* get_scoreboard();
+char* get_hint(char* plid);
 
 #endif
