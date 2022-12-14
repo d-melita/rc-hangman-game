@@ -2,32 +2,43 @@
 
 // STRUCT FOR MATCH
 
-struct game_data {
+typedef struct game_data {
   int trial;
   char *word;
-  char *class;
+  char *file;
   int errors;
   int max_errors;
-  char last_letter[2];
-  int letters_guessed;
-  char last_word[31];
+  int letters_guessed; // number of letters correctly guessed
   char letters_played[31]; // 30 max word size + \0
-  struct guessed_word *guessed_words;
-};
+  struct guessed_word *guesses;
 
-struct game_id {
+  char last_letter[2];
+  char word_status[31];
+} game_data;
+
+typedef struct game_id {
   char plid[7];
   struct game_data *game_data;
+  // struct game_data *last_game;
   struct game_id *next;
   struct game_id *prev;
-};
+} game_id;
 
-struct guessed_word {
+typedef struct guessed_word {
   char *word;
   struct guessed_word *prev;
-};
+} guessed_word;
 
-struct game_id *game = NULL;
+typedef struct sb_entry {
+  char *plid;
+  char *word;
+  int score;
+  int good_trials; // total_trials - errors
+  int total_trials; // trials
+  struct sb_entry *next;
+} sb_entry;
+
+game_id *games = NULL;
 
 char port[6];
 int verbose = 0; // 0 false, 1 true
@@ -40,6 +51,7 @@ int main(int argc, char *argv[]) {
   if (verbose)
     printf("Verbose mode enabled\n");
 
+  fork();
   message_udp();
 
   return 0;
@@ -48,29 +60,25 @@ int main(int argc, char *argv[]) {
 // Parse the arguments given to the program (host and port)
 void parse_args(int argc, char *argv[]) {
   // Two arguments, -v and -p
-  if (argc == 2) { // case 1
+  strcpy(port, DEFAULT_PORT);
 
-    strcpy(port, DEFAULT_PORT);
+  for (int i = 1; i < argc; i++) { // Parse each given option and argument
 
-  } else {
-    for (int i = 2; i < argc; i++) { // Parse each given option and argument
+    if (strcmp(argv[i], "-v") == 0) { // Host option (-n)
+      // SET VERBOSE
+      verbose = 1;
 
-      if (strcmp(argv[i], "-v") == 0) { // Host option (-n)
-        // SET VERBOSE
-        verbose = 1;
-
-      } else if (strcmp(argv[i], "-p") == 0) { // Port option (-p)
-        if (i - 1 < argc)
-          strcpy(port, argv[++i]);
-        else {
-          printf(ERR_MISSING_ARGUMENT, argv[i]);
-          exit(1);
-        }
-
-      } else { // Invalid option
-        printf(ERR_INVALID_OPTION);
+    } else if (strcmp(argv[i], "-p") == 0) { // Port option (-p)
+      if (i - 1 < argc) {
+        strcpy(port, argv[++i]);
+      } else {
+        printf(ERR_MISSING_ARGUMENT, argv[i]);
         exit(1);
       }
+
+    } else { // Invalid option
+      printf(ERR_INVALID_OPTION);
+      exit(1);
     }
   }
 }
@@ -193,18 +201,19 @@ char* start_new_game(char *message) {
     printf("Player %s requested a new game.\n", plid);
 
   // FIND GAME WITH PLID
-  struct game_id *curr_game = get_game(plid);
+  game_id *curr_game = get_game(plid);
 
-  if (curr_game == NULL) { // NO ACTIVE GAMES FOUND FOR PLAYER
-    curr_game = malloc(sizeof(struct game_id));
-    curr_game->game_data = malloc(sizeof(struct game_data));
-    curr_game->next = NULL;
+  if (curr_game == NULL || curr_game->game_data == NULL) { // PLAYER HAS NO ONGOING GAME
+    curr_game = malloc(sizeof(game_id));
+    curr_game->game_data = malloc(sizeof(game_data));
+    // curr_game->last_game = NULL;
     strcpy(curr_game->plid, plid);
 
-    if (game == NULL) { // NO ACTIVE GAMES AT ALL
-      curr_game->prev = NULL;
-      game = curr_game;
-    }
+    if (games != NULL)
+      games->prev = curr_game;
+
+    curr_game->next = games;
+    games = curr_game;
 
     word_length = set_game_word(curr_game->game_data);
     strcpy(status, OK);
@@ -234,9 +243,9 @@ char* play_letter(char *message) {
   if (verbose == 1)
     printf("Player %s requested to play letter %s.\n", plid, letter);
 
-  struct game_id *game_id = get_game(plid);
+  game_id *game_id = get_game(plid);
   if (game_id != NULL) {          // 1: THERES AN ACTIVE GAME FOR PLAYER
-    struct game_data *game = game_id->game_data;
+    game_data *game = game_id->game_data;
 
     if (trial != game->trial) {   // 2: TRIAL NUMBER DOESNT MATCH -> INV
 
@@ -259,13 +268,16 @@ char* play_letter(char *message) {
                                   // 4: LETTER IS IN WORD -> OK
       if (letter_in_word(game->word, letter)) {
         char pos_str[31] = "";
+        char test[2] = "";
         int n = 0;
 
         strcpy(status, OK);
         for (int i = 0; i < strlen(game->word); i++) {
           if (game->word[i] == letter[0]) {
-            sprintf(pos_str, "%s %d", pos_str, i+1);
+            sprintf(test, "%d", i+1);
+            sprintf(pos_str, "%s %s", pos_str, test);
             game->letters_guessed++;
+            game->word_status[i] = letter[0];
             n++;
           }
         }
@@ -286,12 +298,14 @@ char* play_letter(char *message) {
         // 5.1: MAX ERRORS REACHED -> OVR
         if (game->errors == game->max_errors) {
           strcpy(status, OVR);
-          // TODO
+          
         }
 
         sprintf(buffer, "%s %s %d\n", RLG, status, game->trial++);
       }
       strcpy(game->last_letter, letter);
+
+      update_game_status(game_id, letter);
     }
 
   } else {
@@ -317,11 +331,11 @@ char* guess_word(char *message) {
     printf("Player %s sent a guess: %s.\n", plid, word);
   }
 
-  struct game_id *game_id = get_game(plid);
+  game_id *game_id = get_game(plid);
   if (game_id != NULL){
-    struct game_data *game = game_id->game_data;
+    game_data *game = game_id->game_data;
     if (trial != game->trial){
-      if (trial == game->trial-1 && strcmp(game->last_word, word) == 0){
+      if (trial == game->trial-1 && strcmp(game->guesses->word, word) == 0){
         return NULL; // RESEND LAST GUESS RESPONSE
       }
       else{
@@ -329,7 +343,7 @@ char* guess_word(char *message) {
         sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
       }
     }
-    else if (word_played(word, game->guessed_words) == 1){
+    else if (word_played(word, game->guesses) == 1){
       strcpy(status, DUP);
       sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
     }
@@ -339,12 +353,17 @@ char* guess_word(char *message) {
       if (strcmp(game->word, word) == 0){
         strcpy(status, WIN);
         sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
+        game->letters_guessed = strlen(game->word); // TODO
+        strcpy(game->word_status, game->word);
+        update_game_status(game_id, word);
+        // archive_game(game_id);
       }
       else{
         game->errors++;
 
         if (game->errors == game->max_errors){
           strcpy(status, OVR);
+          // archive_game(game_id);
         }
 
         else{
@@ -354,13 +373,15 @@ char* guess_word(char *message) {
         sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
       }
 
-      strcpy(game->last_word, word);
+      strcpy(game->guesses->word, word);
       // add word to guessed_words and link them
-      strcpy(game->guessed_words->word, word);
-      struct guessed_word *next_word = (struct guessed_word*) malloc(sizeof(struct guessed_word));
+      strcpy(game->guesses->word, word);
+      guessed_word *next_word = (guessed_word*) malloc(sizeof(guessed_word));
       next_word->word = (char*) malloc(256 * sizeof(char));
-      next_word->prev = game->guessed_words;
-      game->guessed_words = next_word;
+      next_word->prev = game->guesses;
+      game->guesses = next_word;
+
+      update_game_status(game_id, word);
     }
   }
   else{
@@ -383,14 +404,14 @@ char* quit(char *message) {
   if (verbose == 1)
     printf("Player %s requested to quit the game.\n", plid);
 
-  struct game_id *curr_game = get_game(plid);
+  game_id *curr_game = get_game(plid);
   if (curr_game == NULL) { // NO ACTIVE GAMES FOUND FOR PLAYER
     printf("DEBUG: No active games found for player\n");
 
     strcpy(status, ERR);
   } else { // ACTIVE GAME FOUND
+    state(curr_game);
     delete_game(curr_game); // DELETE GAME
-
     strcpy(status, OK);
   }
 
@@ -400,9 +421,9 @@ char* quit(char *message) {
 }
 
 // Returns the length of the word
-int set_game_word(struct game_data *game_data) {
+int set_game_word(game_data *game_data) {
   char word[31];
-  char class[31];
+  char file[64];
   int i;
   int word_length;
   int random_number;
@@ -419,20 +440,20 @@ int set_game_word(struct game_data *game_data) {
 
   // get word from file
   for (i = 0; i <= random_number; i++) {
-    fscanf(fp, "%s %s", word, class);
+    fscanf(fp, "%s %s", word, file);
   }
 
   word_length = strlen(word);
 
   // set game data
   game_data->word = malloc((word_length + 1) * sizeof(char));
-  game_data->class = malloc((strlen(class) + 1) * sizeof(char));
-  game_data->guessed_words = malloc(sizeof(struct guessed_word));
-  game_data->guessed_words->prev = NULL;
-  game_data->guessed_words->word = malloc((256) * sizeof(char));
+  game_data->file = malloc((strlen(file) + 1) * sizeof(char));
+  game_data->guesses = malloc(sizeof(guessed_word));
+  game_data->guesses->prev = NULL;
+  game_data->guesses->word = malloc((256) * sizeof(char));
 
   strcpy(game_data->word, word);
-  strcpy(game_data->class, class);
+  strcpy(game_data->file, file);
   
   if (word_length < 7)
     game_data->max_errors = 7;
@@ -447,12 +468,17 @@ int set_game_word(struct game_data *game_data) {
   strcpy(game_data->last_letter, "");
   strcpy(game_data->letters_played, "");
 
+  for (int i = 0; i < word_length; i++) {
+    game_data->word_status[i] = '-';
+  }
+  game_data->word_status[word_length] = '\0';
+
   fclose(fp);
   return word_length;
 }
 
-struct game_id *get_game(char *plid) {
-  struct game_id *curr_game = game;
+game_id *get_game(char *plid) {
+  game_id *curr_game = games;
 
   while (curr_game != NULL) {
     if (strcmp(curr_game->plid, plid) == 0)
@@ -473,27 +499,129 @@ int letter_in_word(char *letters_guessed, char *letter) {
   return 0;
 }
 
-void delete_game(struct game_id *curr_game) {
-  if (curr_game->prev == NULL) // GAME IS FIRST IN LIST
-    game = curr_game->next;
+// void archive_game(game_id* game) {
+//   if (game->last_game != NULL) {
+//     // Free everything in game_data
+//     free(game->last_game->word);
+//     free(game->last_game);
+//   }
+//   game->last_game = game->game_data;
+//   game->game_data = NULL;
+// }
+
+void delete_game(game_id *game) {
+  if (game->prev == NULL) // GAME IS FIRST IN LIST
+    games = game->next;
   else
-    curr_game->prev->next = curr_game->next;
+    game->prev->next = game->next;
 
-  if (curr_game->next != NULL) // GAME IS NOT LAST IN LIST
-    curr_game->next->prev = curr_game->prev;
+  if (game->next != NULL) // GAME IS NOT LAST IN LIST
+    game->next->prev = game->prev;
 
-  free(curr_game->game_data->word);
-  free(curr_game->game_data->class);
-  free(curr_game->game_data);
-  free(curr_game);
+  // Free everything in game_data
+  free(game->game_data->word);
+  free(game->game_data);
+  
+  guessed_word *curr_word = game->game_data->guesses;
+  guessed_word *prev_word = NULL;
+  while (curr_word != NULL) {
+    prev_word = curr_word;
+    curr_word = curr_word->prev;
+    free(prev_word->word);
+    free(prev_word);
+  }
+
+  // Archiving twice game_data is the same as deleting
+  // archive_game(game);
+  // archive_game(game);
 }
 
-int word_played(char *word, struct guessed_word *guessed_words) {
+int word_played(char *word, guessed_word *guessed_words) {
 
-  while (guessed_words->prev != NULL) {
+  while (guessed_words != NULL) {
     if (strcmp(guessed_words->word, word) == 0)
       return 1;
     guessed_words = guessed_words->prev;
   }
   return 0;
+}
+
+/* --------------------------------------------------------------------------------------------------------------
+
+
+                                                SERVER TCP FUNCTIONS
+
+
+   --------------------------------------------------------------------------------------------------------------
+ */
+
+void update_game_status(game_id *game, char* attempt) {
+  char filename[256];
+  
+  sprintf(filename, "GAMES/game_%s.txt", game->plid);
+
+  FILE *fp = fopen(filename, "a");
+  if (fp == NULL) {
+    perror("fopen");
+    exit(1);
+  }
+
+  if (strlen(attempt) == 1) // Letter trial
+    fprintf(fp, "Letter trial: %s\n", attempt);
+  else // Word trial
+    fprintf(fp, "Word guess: %s\n", attempt);
+
+  fclose(fp);
+}
+
+/* Function which writes to file in directory GAMES and file game_plid.txt 
+* the current state of the game.
+*/
+char* state(game_id *game) {
+  char filename[256];
+  char buffer[256];
+  char* out;
+  out = (char*)malloc(5024 * sizeof(char));
+
+  sprintf(filename, "GAMES/game_%s.txt", game->plid);
+
+  FILE *pl = fopen(filename, "r");
+  if (pl == NULL) {
+    perror("fopen");
+    exit(1);
+  }
+
+  int n = 0;
+  int ongoing_game = 1;
+  if (strcmp(game->game_data->word, game->game_data->word_status) == 0
+    || game->game_data->errors == game->game_data->max_errors)
+    ongoing_game = 0;
+
+  if (ongoing_game == 0) {
+    n=sprintf(out, "Last finalized game for player %s\n", game->plid);
+    n+=sprintf(out+n, "Word: %s Hint file: %s\n", game->game_data->word,
+      game->game_data->file);
+    n+=sprintf(out+n, "%d transactions found:\n", game->game_data->trial-1);
+  } else {
+    n+=sprintf(out+n, "Active game found for player %s\n", game->plid);
+    if (game->game_data->trial == 1)
+      n+=sprintf(out+n, "Game started - no transactions found\n");
+    else
+      n+=sprintf(out+n, "--- Transactions found: %d---\n", game->game_data->trial-1);
+  }
+
+  for (int i = 0; i < game->game_data->trial-1; i++) {
+    fgets(buffer, 256, pl);
+    n+=sprintf(out+n, "%s", buffer);
+  }
+  
+  if (strcmp(game->game_data->word_status, game->game_data->word) == 0)
+    n+=sprintf(out+n, "TERMINATION: WIN\n");
+  else if (game->game_data->errors == game->game_data->max_errors)
+    n+=sprintf(out+n, "TERMINATION: FAIL\n");
+  else
+    n+=sprintf(out+n, "Solved so far: %s\n", game->game_data->word_status);
+
+  fclose(pl);
+  return out;
 }

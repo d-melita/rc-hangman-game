@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dirent.h>
 #include <time.h>
 
 // DEFINES
@@ -73,6 +74,7 @@ char* start_new_game(char *message);
 char* guess_letter(char *message);
 char* guess_word(char *message);
 char* quit(char *message);
+char* state(struct game_id *game);
 
 char* play_letter(char *message);
 
@@ -81,6 +83,7 @@ int set_game_word(struct game_data* game_data);
 int letter_in_word(char* word, char* letter);
 void delete_game(struct game_id* game_id);
 int word_played(char* word, struct guessed_word* guessed_words);
+void update_game_status(struct game_id *game, char* attempt);
 
 
 #endif
