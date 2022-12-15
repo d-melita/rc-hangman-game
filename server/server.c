@@ -592,7 +592,7 @@ void update_game_status(game_id *game, char* attempt, char* status) {
 /* Function which writes to file in directory GAMES and file game_plid.txt 
 * the current state of the game.
 */
-char* state(char* plid) {
+char* state(char* plid, int fd) {
   char filename[256]; // File with game history
   char st_filename[256]; // File with game status
   char trans_buffer[5024]; // Temporary buffer for all the attempts taken
@@ -664,12 +664,11 @@ char* state(char* plid) {
     n+=sprintf(file+n, "Solved so far: %s\n", word_status);
     sprintf(reply, "%s %s %s %ld ", RST, ACT, filename, strlen(file));
   }
-  
-  strcat(reply, file);
-  free(file);
 
+  send_message_tcp(fd, reply);
+  send_file(fd, file, strlen(file));
+  free(file);
   fclose(fp);
-  return reply;
 }
 
 void message_tcp() {
@@ -726,7 +725,7 @@ void message_tcp() {
       exit(1);
     }
 
-    response = parse_tcp(buffer, newfd);
+    parse_tcp(buffer, newfd);
 
     puts("Sending response");
     
@@ -743,33 +742,28 @@ void message_tcp() {
   freeaddrinfo(res);
 }
 
-char* parse_tcp(char *message, int fd){
+void parse_tcp(char *message, int fd){
   char code[4];
   char plid[7];
 
   sscanf(message, "%s", code);
 
   if (strcmp(code, GSB) == 0){
-    return get_scoreboard();
+    get_scoreboard();
   }
 
   else if(strcmp(code, GHL) == 0){
     sscanf(message, "%s %s", code, plid);
-    return get_hint(plid);
+    get_hint(fd, plid);
   }
 
   else if(strcmp(code, STA) == 0){
     sscanf(message, "%s %s", code, plid);
-    return state(plid);
-  }
-
-  else{
-    puts("Invalid command");
-    return ERR;
+    state(plid, fd);
   }
 }
 
-char* get_hint(char* plid){
+void get_hint(int fd, char* plid){
   char status[4];
   char st_filename[64];
   char *reply;
@@ -800,7 +794,7 @@ char* get_hint(char* plid){
     puts("File does not exist");
     reply = (char*)malloc(strlen(RHL) + strlen(NOK) + 2);
     sprintf(reply, "%s %s\n", RHL, NOK);
-    return reply;
+    send_message_tcp(fd, reply);
   }
 
   // get filename size
@@ -811,31 +805,27 @@ char* get_hint(char* plid){
   fseek(fp, 0, SEEK_SET);
 
   // get file content
-
   char *file = (char*)malloc(fsize + 1);
-  long bytes_left = fsize;
-  long bytes_read = 0;
-  int n = 0;
-  while (bytes_read < fsize) {
-    if (256 > fsize - bytes_read)
-      bytes_left = fsize - bytes_read;
-    else
-      bytes_left = 256;
-
-    n = read(fileno(fp), file + bytes_read, bytes_left);
-    if (n <= 0) {
-      perror("read");
-      exit(1);
-    }
-    bytes_read += n;
-  }
+  fread(file, fsize, 1, fp);
 
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize + strlen(file) + 2);
-  sprintf(reply, "%s %s %s %ld %s\n", RHL, OK, word_file, fsize, file);
+  sprintf(reply, "%s %s %s %ld ", RHL, OK, word_file, fsize);
 
-  printf("Reply: %s %ld\n", word_file, fsize);
-  puts(file);
-  return reply;
-
+  send_message_tcp(fd, reply);
+  send_file(fd, file, fsize);
 }
 char* get_scoreboard() { return NULL; }
+
+void send_message_tcp(int fd, char* message){
+  ssize_t n = write(fd, message, strlen(message));
+  while (n < strlen(message)) {
+    n += write(fd, message+n, strlen(message)-n);
+  }
+}
+
+void send_file(int fd, char* file, int fsize){
+  ssize_t n = write(fd, file, fsize);
+  while (n < fsize) {
+    n += write(fd, file+n, fsize-n);
+  }
+}

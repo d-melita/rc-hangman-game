@@ -5,6 +5,6 @@ CAR car.jpg
 BUS bus.jpg
 ROCK rock.jpg
 TOOTHBRUSH toothbrush.png
-LETTUCE lettuce.png
-JOKER joker.png
-COMPUTER computer.png
+LETTUCE lettuce.jpg
+JOKER joker.jpg
+COMPUTER computer.jpg

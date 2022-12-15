@@ -83,9 +83,11 @@ int word_played(char* word, struct guessed_word* guessed_words);
 void update_game_status(struct game_id *game, char* attempt, char* status);
 
 void message_tcp();
-char* state(char* plid);
-char* parse_tcp(char *message, int fd);
+char* state(char* plid, int fd);
+void parse_tcp(char *message, int fd);
 char* get_scoreboard();
-char* get_hint(char* plid);
+void get_hint(int fd, char* plid);
+void send_message_tcp(int fd, char* message);
+void send_file(int fd, char* file, int fsize);
 
 #endif
