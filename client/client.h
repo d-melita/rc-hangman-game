@@ -1,28 +1,27 @@
 #ifndef _CLIENT_H
 #define _CLIENT_H
 
-
 // INCLUDES
 
-#include <unistd.h>
+#include <arpa/inet.h>
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <errno.h>
-
+#include <sys/types.h>
+#include <unistd.h>
 
 // DEFINES
 
 #define DEFAULT_SERVER "tejo.ist.utl.pt"
-#define DEFAULT_PORT "58090" // must be 58000 + Group Number 
-#define GN 90 // group number
+#define DEFAULT_PORT "58090" // must be 58000 + Group Number
+#define GN 90                // group number
 
 #define START "start"
 #define SG "sg"
@@ -67,6 +66,11 @@
 #define FIN "FIN"
 #define EMPTY "EMPTY"
 
+// MESSAGES
+#define GAME_OVER "Game over\n"
+#define WELL_DONE "WELL DONE! YOU GUESSED: %s\n"
+#define FILE_RECEIVED "File %s received (%d bytes) in current directory.\n"
+#define WARN_EMPTY_SB "Scoreboard is empty\n"
 
 // Buffer sizes
 
@@ -79,7 +83,6 @@
 
 #define READ_AMOUNT 512 // Default amount of bytes to read from TCP socket
 
-
 // Error messages (Consider adding '%s')
 
 #define ERR_INVALID_PLID "ERROR: Invalid player ID\n"
@@ -90,7 +93,7 @@
 #define ERR_UNKNOWN_CODE "ERROR: Unexpected response code\n"
 #define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
 #define ERR_INVALID_OPTION "ERROR: Invalid option\n"
-#define ERR_ONGOING_GAME "ERROR: There is an ongoing game\n"
+#define ERR_ONGOING_GAME "ERROR: There is an ongoing game. Type quit to terminate it since it is impossible to restore its status\n"
 #define ERR_NO_GAME "ERROR: There is no active game\n"
 #define ERR_NO_GAMES_FOUND "Game server did not find any games\n"
 #define ERR_NO_MATCHES_CHAR "ERROR: The given character does not appear in current word\n"
@@ -106,19 +109,33 @@
 #define ERR_CLOSE_FILE "ERROR: Could not close file\n"
 #define ERR_WRITE_FILE "ERROR: Could not write to file\n"
 #define ERR_NO_PLID "ERROR: No player ID\n"
-#define ERR_WRONG_CHAR_GAMEOVER "ERROR: The given letter does not appear in current word and the game is over\n"
-#define ERR_INVALID "ERROR: Trial number not valid or repeating last PLG stored at the GS with different letter\n"
-#define ERR_INVALID_2 "ERROR: PLG syntax incorrect, PLID not valid or there's no ongoing game for the specified player PLID\n"
+#define ERR_WRONG_CHAR_GAMEOVER                                                \
+  "ERROR: The given letter does not appear in current word and the game is "   \
+  "over\n"
+#define ERR_INVALID                                                            \
+  "ERROR: Trial number not valid or repeating last PLG stored at the GS with " \
+  "different letter\n"
+#define ERR_INVALID_2                                                          \
+  "ERROR: PLG syntax incorrect, PLID not valid or there's no ongoing game "    \
+  "for the specified player PLID\n"
 #define ERR_WRONG_GUESS "ERROR: The guess was incorrect!\n"
 #define ERR_DUP_GUESS "ERROR: This word has already been rejected\n"
-#define ERR_WRONG_GUESS_GAMEOVER "ERROR: The guess was incorrect and the game is over\n"
-#define ERR_FILE_NOK "ERROR: There's no file to be sent or some other problem occured\n"
-#define ERR_CONNECTION "ERROR: Communication with the server failed please retry later\n"
+#define ERR_WRONG_GUESS_GAMEOVER                                               \
+  "ERROR: The guess was incorrect and the game is over\n"
+#define ERR_FILE_NOK                                                           \
+  "ERROR: There's no file to be sent or some other problem occured\n"
+#define ERR_CONNECTION                                                         \
+  "ERROR: Communication with the server failed please retry later\n"
 #define ERR_TIMEOUT "ERROR: Timeout\n"
 #define ERR_SELECT "ERROR: Select error\n"
 #define ERR_SCANF "ERROR: scanf error, EOF reached or empty string read.\n"
+#define ERR_SELECT_SOCKET "Error in select_socket function, unknown value for readWrite argument\n"
+#define ERR_SELECT_RETURNED "ERROR: select returned %d\n"
 
-#define WARN_EMPTY_SB "Scoreboard is empty\n"
+// SIGNAL MESSAGES
+#define CLOSING_SIGNAL "\nClosing Signal Received...\n"
+#define BROKEN_PIPE "\nBroken Pipe Signal Received...\n"
+#define IGNORING_SIGNAL "\nIgnoring unexpected signal...\n"
 
 // Function prototypes
 void parse_args(int argc, char *argv[]);
@@ -141,10 +158,7 @@ void win_function();
 void win_word_function();
 
 void message_tcp(char *buffer);
-void parse_response_tcp(int fd, char *message);
-void scoreboard(int fd, char *message);
-void get_hint(int fd, char *message);
-void game_status(int fd, char *message);
+void parse_response_tcp(int fd);
 
 /// Read unknown length string from socket to buffer,
 /// copying it to 'string' buffer as a string.
@@ -155,7 +169,7 @@ void game_status(int fd, char *message);
 /// \param response response message (with file)
 ///
 /// \returns 0 on success
-int read_buffer2string(int fd, char *buffer, char *string);
+int read_buffer2string(int fd, char *string);
 
 /// Receive file from socket, saving it locally.
 ///
@@ -165,7 +179,7 @@ int read_buffer2string(int fd, char *buffer, char *string);
 /// \param response response message (with file)
 ///
 /// \returns void
-void get_file(int fd, char* code, char* status, char* response);
+void get_file(int fd);
 
 /// Set a given signal to be handled by handler function.
 ///
@@ -188,4 +202,4 @@ int select_socket(int fd, int readWrite, int timeout);
 /// are found, 0 otherwise
 int clear_input();
 
-#endif  
+#endif

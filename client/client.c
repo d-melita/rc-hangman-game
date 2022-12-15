@@ -199,7 +199,10 @@ void play_function() {
   if (n == EOF || n == 0) {
     exit(1); // EOF or no input
   }
-  current_game.last_letter[0] = current_game.last_letter[0] - 'a' + 'A';
+  
+  if(isupper(current_game.last_letter[0]) == 0){
+    current_game.last_letter[0] = current_game.last_letter[0] - 'a' + 'A';
+  }
   sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter,
           current_game.trial);
   printf("%s", message);
@@ -336,8 +339,7 @@ int select_socket(int fd, int readWrite, int timeout) {
     // watch for reading, add NULL for writing and errors
     break;
   default:
-    printf("Error in select_socket function, unknown value for readWrite "
-           "argument\n");
+    printf(ERR_SELECT_SOCKET);
     exit(1);
   }
 
@@ -361,7 +363,7 @@ int select_socket(int fd, int readWrite, int timeout) {
     }
     return 0;
   default:
-    printf("ERROR: select returned %d\n", out_fd);
+    printf(ERR_SELECT_RETURNED, out_fd);
     exit(1);
   }
 }
@@ -425,7 +427,7 @@ void parse_response_udp(char *message) {
   char status[4];
   char *word;
 
-  printf("%s\n", message);
+  printf("%s", message);
 
   // scan the message and get the code and status
   sscanf(message, "%s %s", code, status);
@@ -434,7 +436,6 @@ void parse_response_udp(char *message) {
     if (strcmp(status, OK) == 0) {
       set_new_game(message);
     } else if (strcmp(status, NOK) == 0) {
-      game_ongoing = 1;
       printf(ERR_ONGOING_GAME);
     }
   }
@@ -501,7 +502,7 @@ void parse_response_udp(char *message) {
 
   else if (strcmp(code, RQT) == 0) {
     if (strcmp(status, OK) == 0) {
-      printf("Game over\n");
+      printf(GAME_OVER);
     } else if (strcmp(status, ERR) == 0) {
       printf(ERR_NO_GAME);
     }
@@ -541,7 +542,7 @@ void set_new_game(char *message) {
          &current_game.max_errors);
   word = (char *)malloc((current_game.length + 1) * sizeof(char));
   for (int i = 0; i < current_game.length; i++) {
-    word[i] = '_';
+    word[i] = '-';
   }
   word[current_game.length] = '\0';
   // set new game components
@@ -602,16 +603,16 @@ void play_made(char *message) {
 
 void win_function() {
   for (int i = 0; i < current_game.length; i++) {
-    if (current_game.word[i] == '_') {
+    if (current_game.word[i] == '-') {
       current_game.word[i] = current_game.last_letter[0];
     }
   }
-  printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
+  printf(WELL_DONE, current_game.word);
 }
 
 void win_word_function() {
   strcpy(current_game.word, current_game.word_guessed);
-  printf("WELL DONE! YOU GUESSED: %s\n", current_game.word);
+  printf(WELL_DONE, current_game.word);
 }
 
 /* --------------------------------------------------------------------------------------------------------------
@@ -623,9 +624,10 @@ void win_word_function() {
    --------------------------------------------------------------------------------------------------------------
  */
 
-int read_buffer2string(int fd, char *buffer, char *string) {
+int read_buffer2string(int fd, char *string) {
   int errcode;
   int n;
+  char *buffer = (char *)malloc(256 * sizeof(char));
 
   int bytes = 0;
   n = read(fd, buffer + bytes, 1);
@@ -646,29 +648,30 @@ int read_buffer2string(int fd, char *buffer, char *string) {
   return bytes;
 }
 
-void get_file(int fd, char *code, char *status, char *response) {
+void get_file(int fd) {
   int n, errcode;
   char filename[128];
   char filesize_str[128];
+  char *response;
   int filesize;
   int bytes = 0;
   int to_read;
 
   // READ FILENAME
-  bytes += read_buffer2string(fd, response, filename);
+  bytes += read_buffer2string(fd, filename);
 
   // READ FILESIZE
-  bytes += read_buffer2string(fd, response, filesize_str);
+  bytes += read_buffer2string(fd, filesize_str);
   filesize = atoi(filesize_str);
 
-  puts(filename);
-  printf("%d\n", filesize);
   // READ AND WRITE IMAGE
   FILE *fp = fopen(filename, "w");
   if (fp == NULL) {
     perror(ERR_OPEN_FILE);
     exit(1);
   }
+
+  response = (char*)malloc(filesize*sizeof(char));
 
   bytes = 0;
   while (bytes < filesize) {
@@ -690,10 +693,8 @@ void get_file(int fd, char *code, char *status, char *response) {
   }
   fclose(fp);
 
-  sprintf(response, "%s %s %s %d", code, status, filename, filesize);
-
-  printf("File %s received (%d bytes) in current directory.\n", filename,
-         filesize);
+  printf(FILE_RECEIVED, filename, filesize);
+  free(response);
 }
 
 void message_tcp(char *buffer) {
@@ -703,10 +704,6 @@ void message_tcp(char *buffer) {
   struct addrinfo hints, *res;
   struct sockaddr_in addr;
   int bytes;
-  char response[1024];
-  char code[4];
-  char status[7];
-  char init[20];
 
   fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
   if (fd == -1) {
@@ -736,28 +733,25 @@ void message_tcp(char *buffer) {
     }
     bytes += n;
   }
-  // READ CODE
-  read_buffer2string(fd, response, code);
-  // READ STATUS
-  read_buffer2string(fd, response, status);
 
-  sprintf(init, "%s %s", code, status);
-  parse_response_tcp(fd, init);
+  parse_response_tcp(fd);
 
   freeaddrinfo(res);
   close(fd);
 }
 
-void parse_response_tcp(int fd, char *message) {
+void parse_response_tcp(int fd) {
   char code[4];
   char status[7];
 
-  // scan the message and get the code and status
-  sscanf(message, "%s %s", code, status);
+  // READ CODE
+  read_buffer2string(fd, code);
+  // READ STATUS
+  read_buffer2string(fd, status);
 
-  if (strcmp(code, RSB) == 0) {
+  if (strcmp(code, RSB) == 0) { // SCOREBOARD
     if (strcmp(status, OK) == 0) {
-      scoreboard(fd, message);
+      get_file(fd);
     }
 
     else if (strcmp(status, EMPTY) == 0) {
@@ -765,9 +759,9 @@ void parse_response_tcp(int fd, char *message) {
     }
   }
 
-  else if (strcmp(code, RHL) == 0) {
+  else if (strcmp(code, RHL) == 0) { // HINT
     if (strcmp(status, OK) == 0) {
-      get_hint(fd, message);
+      get_file(fd);
     }
 
     else if ((strcmp, NOK) == 0) {
@@ -775,9 +769,9 @@ void parse_response_tcp(int fd, char *message) {
     }
   }
 
-  else if (strcmp(code, RST) == 0) {
+  else if (strcmp(code, RST) == 0) { // STATE
     if (strcmp(status, ACT) == 0 || strcmp(status, FIN) == 0) {
-      game_status(fd, message); // active or last game finished
+      get_file(fd); // active or last game finished
     }
 
     else if (strcmp(status, NOK) == 0) {
@@ -785,7 +779,7 @@ void parse_response_tcp(int fd, char *message) {
     }
   }
 
-  else if (strcmp(code, ERR) == 0) {
+  else if (strcmp(code, ERR) == 0) { //ERROR
     printf(ERR_PROTOCOL);
   }
 
@@ -794,49 +788,16 @@ void parse_response_tcp(int fd, char *message) {
   }
 }
 
-void scoreboard(int fd, char *message) {
-  char code[4];
-  char status[6];
-  char response[500000];
-
-  sscanf(message, "%s %s", code, status);
-
-  // READ FILENAME, FILESIZE AND WRITE IMAGE
-  get_file(fd, code, status, response);
-}
-
-void get_hint(int fd, char *message) {
-  char code[4];
-  char status[4];
-  char response[500000];
-
-  sscanf(message, "%s %s", code, status);
-
-  // READ FILENAME, FILESIZE AND WRITE IMAGE
-  get_file(fd, code, status, response);
-}
-
-void game_status(int fd, char *message) {
-  char code[4];
-  char status[4];
-  char response[500000];
-
-  sscanf(message, "%s %s", code, status);
-
-  // READ FILENAME, FILESIZE AND WRITE IMAGE
-  get_file(fd, code, status, response);
-}
-
 static void handler(int signum) {
   switch (signum) {
   case SIGINT:
-    printf("\nClosing Signal Received...\n");
+    printf(CLOSING_SIGNAL);
     exit(1);
   case SIGPIPE:
-    printf("\nBroken Pipe Signal Received...\n");
+    printf(BROKEN_PIPE);
     exit(1);
   default:
-    printf("\nIgnoring unexpected signal...\n");
+    printf(IGNORING_SIGNAL);
   }
 }
 
