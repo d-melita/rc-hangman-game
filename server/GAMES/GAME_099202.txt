@@ -1,4 +1,1 @@
-Letter trial: O
-Word guess: ALFACE
-Letter trial: U
-Word guess: ABACATE
+Word guess: JOKER

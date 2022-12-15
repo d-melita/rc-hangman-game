@@ -53,11 +53,15 @@
 #define FIN "FIN"
 #define EMPTY "EMPTY"
 
+#define SCOREBOARD "SCOREBOARD.txt"
+#define WORDS "WORDS/"
+
 
 // ERRORS
 
 #define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
 #define ERR_INVALID_OPTION "ERROR: Invalid option\n"
+#define FILE_DNE "ERROR: File does not exist\n"
 
 
 // prototypes
@@ -81,6 +85,8 @@ int letter_in_word(char* word, char* letter);
 void delete_game(struct game_id* game_id);
 int word_played(char* word, struct guessed_word* guessed_words);
 void update_game_status(struct game_id *game, char* attempt, char* status);
+void store_game(struct game_id* game_id);
+void add_scoreboard_line(struct game_id *curr_game);
 
 void message_tcp();
 char* state(char* plid, int fd);

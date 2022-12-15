@@ -277,7 +277,7 @@ char* play_letter(char *message) {
 
     } else {
 
-                                  // 4: LETTER IS IN WORD -> OK
+      // 4: LETTER IS IN WORD -> OK
       if (letter_in_word(game->word, letter)) {
         char pos_str[31] = "";
         char test[2] = "";
@@ -299,6 +299,7 @@ char* play_letter(char *message) {
           strcpy(status, WIN);
           update_game_status(game_id, letter, WIN);
           delete_game(game_id);
+          store_game(game_id);
         } else
           update_game_status(game_id, letter, ACT);
 
@@ -314,6 +315,7 @@ char* play_letter(char *message) {
           strcpy(status, OVR);
           update_game_status(game_id, letter, OVR);
           delete_game(game_id);
+          store_game(game_id);
         } else 
           update_game_status(game_id, letter, ACT);
 
@@ -378,6 +380,7 @@ char* guess_word(char *message) {
         game->letters_guessed = strlen(game->word); // TODO
         strcpy(game->word_status, game->word);
         update_game_status(game_id, word, WIN);
+        store_game(game_id);
         delete_game(game_id);
       }
       else{
@@ -386,6 +389,7 @@ char* guess_word(char *message) {
         if (game->errors == game->max_errors){ // GAMEOVER
           strcpy(status, OVR);
           update_game_status(game_id, word, OVR);
+          store_game(game_id);
           delete_game(game_id);
         }
         else{ // FAIL BUT NOT GAMEOVER
@@ -428,7 +432,80 @@ char* quit(char *message) {
 
   sprintf(buffer, "%s %s\n", RQT, status);
   // send message to client
+  // store game in scoreboard
+  store_game(curr_game);
   return buffer;
+}
+
+void store_game(game_id *curr_game){
+  int score;
+  char line[256];
+  int counter;
+
+  puts("DEBUG: Storing game in scoreboard");
+  int successfull_trials = curr_game->game_data->trial - curr_game->game_data->errors;
+  score = successfull_trials / curr_game->game_data->trial * 100;
+
+  FILE *fp = fopen(SCOREBOARD, "r");
+  if (fp == NULL) {
+    perror("fopen");
+    exit(1);
+  }
+
+  puts("DEBUG: Reading scoreboard");
+  fgets(line, 256, fp); // skip first line
+
+  while (fgets(line, 256, fp) != NULL || counter < 10){
+    char plid[7];
+    int temp_score;
+    int temp_trials;
+    int temp_succ_trials;
+    char temp_word[31];
+    puts("DEBUG: Reading scoreboard line");
+    if (fgets(line, 256, fp) != NULL ){
+      puts("DEBUG: Reading scoreboard line1");
+      counter++;
+      sscanf(line, "%s %d %d %d %s", plid, &temp_score, &temp_trials, &temp_succ_trials, temp_word);
+      if (temp_score < score){
+        //update scoreboard
+        break;
+      }
+
+      else if (temp_score == score){
+        if (temp_succ_trials < successfull_trials){
+          //update scoreboard
+          break;
+        }
+        else if (temp_succ_trials == successfull_trials){
+          if (temp_trials > curr_game->game_data->trial){
+            //update scoreboard
+            break;
+          }
+        }
+      }
+    }
+    else{
+      puts("DEBUG: Reading scoreboard line2");
+      // add new line to scoreboard at the end
+      add_scoreboard_line(curr_game);
+      break;
+    }
+  }
+}
+
+void add_scoreboard_line(struct game_id *curr_game){
+  puts("DEBUG: Adding new line to scoreboarddddddddddddd");
+  FILE *fp = fopen(SCOREBOARD, "a");
+  if (fp == NULL) {
+    perror("fopen");
+    exit(1);
+  }
+
+  int successfull_trials = curr_game->game_data->trial - curr_game->game_data->errors;
+  int score = successfull_trials / curr_game->game_data->trial * 100;
+  puts("DEBUG: Adding new line to scoreboard");
+  fprintf(fp, "%d %s %d %d %s\n", score, curr_game->plid, successfull_trials, curr_game->game_data->trial, curr_game->game_data->word);
+  fclose(fp);
 }
 
 // Returns the length of the word
@@ -785,14 +862,14 @@ void get_hint(int fd, char* plid){
 
   // get file with word_file name
 
-  char *filename = (char*) malloc(strlen("WORDS/") + strlen(word_file) + 1);
-  sprintf(filename, "WORDS/%s", word_file);
+  char *filename = (char*) malloc(strlen(WORDS) + strlen(word_file) + 1);
+  sprintf(filename, "%s%s", WORDS, word_file);
 
   printf("File name: %s\n", filename);
 
   fp = fopen(filename, "r");
   if (access(filename, F_OK) == -1 || access(filename, R_OK) == -1) {
-    puts("File does not exist");
+    printf(FILE_DNE);
     reply = (char*)malloc(strlen(RHL) + strlen(NOK) + 2);
     sprintf(reply, "%s %s\n", RHL, NOK);
     send_message_tcp(fd, reply);
@@ -836,7 +913,8 @@ void send_file(int fd, char* file, int fsize){
 
 void get_scoreboard(int fd){
   char *reply;
-  char *filename = "SCOREBOARD.txt";
+  char *filename;
+  strcpy(filename, SCOREBOARD);
   FILE *fp = fopen(filename, "r");
 
   // get filename size
