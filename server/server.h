@@ -35,7 +35,7 @@
 #define RQT "RQT"
 #define REV "REV"
 #define RVV "RVV"
-#define GSB "GSB\n"
+#define GSB "GSB"
 #define RSB "RSB"
 #define GHL "GHL"
 #define RHL "RHL"
@@ -85,7 +85,7 @@ void update_game_status(struct game_id *game, char* attempt, char* status);
 void message_tcp();
 char* state(char* plid, int fd);
 void parse_tcp(char *message, int fd);
-char* get_scoreboard();
+void get_scoreboard(int fd);
 void get_hint(int fd, char* plid);
 void send_message_tcp(int fd, char* message);
 void send_file(int fd, char* file, int fsize);

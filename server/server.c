@@ -747,9 +747,10 @@ void parse_tcp(char *message, int fd){
   char plid[7];
 
   sscanf(message, "%s", code);
+  puts(code);
 
   if (strcmp(code, GSB) == 0){
-    get_scoreboard();
+    get_scoreboard(fd);
   }
 
   else if(strcmp(code, GHL) == 0){
@@ -795,6 +796,8 @@ void get_hint(int fd, char* plid){
     reply = (char*)malloc(strlen(RHL) + strlen(NOK) + 2);
     sprintf(reply, "%s %s\n", RHL, NOK);
     send_message_tcp(fd, reply);
+    free(reply);
+    return;
   }
 
   // get filename size
@@ -808,13 +811,14 @@ void get_hint(int fd, char* plid){
   char *file = (char*)malloc(fsize + 1);
   fread(file, fsize, 1, fp);
 
-  reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize + strlen(file) + 2);
+  reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize +5);
   sprintf(reply, "%s %s %s %ld ", RHL, OK, word_file, fsize);
 
   send_message_tcp(fd, reply);
   send_file(fd, file, fsize);
+  send_message_tcp(fd, "\n");
+  free(reply);
 }
-char* get_scoreboard() { return NULL; }
 
 void send_message_tcp(int fd, char* message){
   ssize_t n = write(fd, message, strlen(message));
@@ -828,4 +832,36 @@ void send_file(int fd, char* file, int fsize){
   while (n < fsize) {
     n += write(fd, file+n, fsize-n);
   }
+}
+
+void get_scoreboard(int fd){
+  char *reply;
+  char *filename = "SCOREBOARD.txt";
+  FILE *fp = fopen(filename, "r");
+
+  // get filename size
+  fseek(fp, 0, SEEK_END);
+  long fsize = ftell(fp);
+
+  if (fsize == 0){
+    reply = (char*)malloc(strlen(RSB) + strlen(EMPTY) + 3);
+    sprintf(reply, "%s %s\n", RSB, EMPTY);
+    send_message_tcp(fd, reply);
+    return;
+  }
+
+  // go back to the beginning of the file
+  fseek(fp, 0, SEEK_SET);
+
+  // get file content
+  char *file = (char*)malloc(fsize + 1);
+  fread(file, fsize, 1, fp);
+
+  reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(filename) + fsize + 2);
+  sprintf(reply, "%s %s %s %ld ", RSB, OK, filename, fsize);
+
+  send_message_tcp(fd, reply);
+  send_file(fd, file, fsize);
+  send_message_tcp(fd, "\n");
+  free(reply);
 }

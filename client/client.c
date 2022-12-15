@@ -705,7 +705,7 @@ void message_tcp(char *buffer) {
   int bytes;
   char response[1024];
   char code[4];
-  char status[4];
+  char status[7];
   char init[20];
 
   fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
@@ -750,7 +750,7 @@ void message_tcp(char *buffer) {
 
 void parse_response_tcp(int fd, char *message) {
   char code[4];
-  char status[6];
+  char status[7];
 
   // scan the message and get the code and status
   sscanf(message, "%s %s", code, status);
