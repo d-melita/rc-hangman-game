@@ -298,8 +298,8 @@ char* play_letter(char *message) {
         if (game->letters_guessed == strlen(game->word)) {
           strcpy(status, WIN);
           update_game_status(game_id, letter, WIN);
-          delete_game(game_id);
           store_game(game_id);
+          delete_game(game_id);
         } else
           update_game_status(game_id, letter, ACT);
 
