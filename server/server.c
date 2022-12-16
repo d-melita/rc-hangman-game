@@ -29,15 +29,6 @@ typedef struct guessed_word {
   struct guessed_word *prev;
 } guessed_word;
 
-typedef struct sb_entry {
-  char *plid;
-  char *word;
-  int score;
-  int good_trials; // total_trials - errors
-  int total_trials; // trials
-  struct sb_entry *next;
-} sb_entry;
-
 game_id *games = NULL;
 
 char port[6];
@@ -280,13 +271,13 @@ char* play_letter(char *message) {
       // 4: LETTER IS IN WORD -> OK
       if (letter_in_word(game->word, letter) == 1) {
         char pos_str[31] = "";
-        char test[5] = "";
+        char temp[5] = "";
         int ocurrences = 0;
 
         for (int i = 0; i < strlen(game->word); i++) {
           if (game->word[i] == letter[0]) {
-            sprintf(test, " %d", i+1);
-            strcat(pos_str, test);
+            sprintf(temp, " %d", i+1);
+            strcat(pos_str, temp);
             game->letters_guessed++;
             game->word_status[i] = letter[0];
             ocurrences++;
@@ -410,7 +401,6 @@ char* guess_word(char *message) {
     sprintf(buffer, "%s %s\n", RWG, status);
   }
   return buffer;
-  //TODO IMPLEMENT DUP CASE - CHOOSE BETWEEN STRUCT OR FILE
 }
 
 char* quit(char *message) {
@@ -449,6 +439,11 @@ void store_game(game_id *curr_game){
   int successfull_trials = trials - curr_game->game_data->errors;
   int score = (int)((successfull_trials / (float)trials) * 100.0);
 
+  if (curr_game->game_data->letters_guessed == 0
+   && curr_game->game_data->guesses->word == NULL){
+    score = 0;
+  }
+
   FILE *fp;
   if (access(SCOREBOARD, F_OK) == -1) {
     fp = fopen(SCOREBOARD, "w+"); // Create SB file if it doesn't exist
@@ -466,7 +461,6 @@ void store_game(game_id *curr_game){
     exit(1);
   }
 
-  // fgets(line, 256, fp); // skip first line // TODO
   int done = 0;
   int counter = 0;
   
@@ -526,6 +520,11 @@ void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
   int successfull_trials = trials - curr_game->game_data->errors;
   int score = (int)((successfull_trials / (float)trials) * 100.0);
 
+  if (curr_game->game_data->letters_guessed == 0
+   && curr_game->game_data->guesses->word == NULL){
+    score = 0;
+  }
+
   fprintf(fp, "%d %s %d %d %s\n", score, curr_game->plid, successfull_trials, curr_game->game_data->trial, curr_game->game_data->word);
 }
 
@@ -551,6 +550,10 @@ int set_game_word(game_data *game_data) {
   // get word from file
   for (i = 0; i <= random_number; i++) {
     fscanf(fp, "%s %s", word, file);
+  }
+
+  for (i = 0; i < strlen(word); i++) {
+    word[i] = toupper(word[i]);
   }
 
   word_length = strlen(word);
@@ -694,7 +697,8 @@ void update_game_status(game_id *game, char* attempt, char* status) {
 char* state(char* plid, int fd) {
   char filename[256]; // File with game history
   char st_filename[256]; // File with game status
-  char trans_buffer[5024]; // Temporary buffer for all the attempts taken
+  char trans_buffer[5024] = ""; // Temporary buffer for all the attempts taken
+  char temp[256];
   char* reply = (char*)malloc(5024 * sizeof(char));
   char* file = (char*)malloc(5024 * sizeof(char));
 
@@ -720,7 +724,6 @@ char* state(char* plid, int fd) {
   if (strcmp(game_status, OVR) == 0) // ask the teachers about this lmfao
     strcpy(game_status, "FAIL");
 
-
   sprintf(filename, "GAMES/GAME_%s.txt", plid);
   fp = fopen(filename, "r"); // Open file with plays
   if (fp == NULL) {
@@ -730,8 +733,9 @@ char* state(char* plid, int fd) {
 
   int trials = 0;
   // Read every line from filename and append them to transbuffer, while increasing trials
-  while (fgets(trans_buffer+strlen(trans_buffer), 5024, fp) != NULL) {
+  while (fgets(temp, 256, fp) != NULL) {
     trials++;
+    strcat(trans_buffer, temp);
   }
 
   int ongoing_game = 1;
@@ -790,6 +794,8 @@ void message_tcp() {
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
 
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
   errcode = getaddrinfo(NULL, port, &hints, &res);
   if (errcode != 0) {
     perror("getaddrinfo");
@@ -814,8 +820,8 @@ void message_tcp() {
       perror("accept");
       exit(1);
     }
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
     
-
     puts("Connection accepted");
 
     n = read(newfd, buffer, 256);

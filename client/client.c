@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
       start_function();
     }
 
+    // TODO check if game_ongoing == 1??
     else if (strcmp(command, PLAY) == 0 || strcmp(command, PL) == 0) {
       play_function();
     }
@@ -200,9 +201,7 @@ void play_function() {
     exit(1); // EOF or no input
   }
   
-  if(isupper(current_game.last_letter[0]) == 0){
-    current_game.last_letter[0] = current_game.last_letter[0] - 'a' + 'A';
-  }
+  current_game.last_letter[0] = toupper(current_game.last_letter[0]);
   sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter,
           current_game.trial);
   printf("%s", message);
@@ -210,6 +209,11 @@ void play_function() {
   if (clear_input() == 1) {
     puts(ERR_INVALID_ARGS);
     free(message);
+    return;
+  }
+
+  if (game_ongoing == 0) {
+    printf(ERR_NO_GAME);
     return;
   }
 
@@ -235,8 +239,13 @@ void guess_function() {
     return;
   }
 
+  if (game_ongoing == 0) {
+    printf(ERR_NO_GAME);
+    return;
+  }
+
   for (int i = 0; i < strlen(current_game.word_guessed); i++) {
-    current_game.word_guessed[i] = current_game.word_guessed[i] - 'a' + 'A';
+    current_game.word_guessed[i] = toupper(current_game.word_guessed[i]);
   }
 
   message = malloc(12 + strlen(current_game.word_guessed) + strlen(trial_str));
@@ -282,6 +291,11 @@ void state_function() {
     return;
   }
 
+  if (game_ongoing == 0) {
+    printf(ERR_NO_GAME);
+    return;
+  }
+
   if (strcmp(plid, "") == 0) {
     printf(ERR_NO_PLID);
     return;
@@ -319,55 +333,6 @@ void quit_function() {
    --------------------------------------------------------------------------------------------------------------
  */
 
-int select_socket(int fd, int readWrite, int timeout) {
-  fd_set current_sockets, ready_sockets;
-  int out_fd;
-  FD_ZERO(&current_sockets);
-  FD_SET(fd, &current_sockets); // add the socket to the set
-
-  struct timeval opt = {timeout, 0}; // timeout seconds udp socket timeout
-
-  switch (readWrite) {
-  case 0: // Watch for writing
-    ready_sockets = current_sockets;
-    out_fd = select(FD_SETSIZE, NULL, &ready_sockets, NULL, &opt);
-    // watch for writing, add NULL for reading and errors
-    break;
-  case 1: // Watch for reading
-    ready_sockets = current_sockets;
-    out_fd = select(FD_SETSIZE, &ready_sockets, NULL, NULL, &opt);
-    // watch for reading, add NULL for writing and errors
-    break;
-  default:
-    printf(ERR_SELECT_SOCKET);
-    exit(1);
-  }
-
-  switch (out_fd) { // check the return value of select
-  case -1:
-    perror(ERR_SELECT);
-    exit(1);
-  case 0:
-    puts(ERR_TIMEOUT);
-    return 1;
-  case 1:
-    int so_error;
-    socklen_t len = sizeof so_error;
-
-    getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &len);
-
-    if (so_error != 0) {
-      // socket has a non zero error status
-      puts(ERR_SOCKET);
-      exit(1);
-    }
-    return 0;
-  default:
-    printf(ERR_SELECT_RETURNED, out_fd);
-    exit(1);
-  }
-}
-
 void message_udp(char *buffer) {
   int fd, errcode;
   ssize_t n;
@@ -401,10 +366,16 @@ void message_udp(char *buffer) {
     return;
   }
 
-  // Wait <time>, to get response (server might've lost connection)
-  n = select_socket(fd, 1, 5);
-  if (n == 1)
-    return;
+  struct timeval tv = {TIMEOUT, 0};
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv) < 0) {
+    if (errno == ETIMEDOUT) {
+      printf(ERR_TIMEOUT);
+      return;
+    } else {
+      perror("setsockopt");
+      exit(1);
+    }
+  }
 
   addrlen = sizeof(addr);
   n = recvfrom(fd, response, 128, 0, (struct sockaddr *)&addr, &addrlen);
@@ -714,6 +685,19 @@ void message_tcp(char *buffer) {
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
+
+  // Timeout for TCP socket
+  struct timeval tv = {TIMEOUT, 0};
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv) < 0) {
+    if (errno == ETIMEDOUT) {
+      printf(ERR_TIMEOUT);
+      return;
+    } else {
+      perror("setsockopt");
+      exit(1);
+    }
+  }
 
   errcode = getaddrinfo(ip, port, &hints, &res);
   if (errcode != 0) {
