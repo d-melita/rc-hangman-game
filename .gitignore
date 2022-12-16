@@ -61,7 +61,8 @@ client/*.png
 client/*.svg
 client/*.txt 
 
-server/GAMES/
+server/GAMES/*.txt
 server/SCOREBOARD.txt
 
 **/vgcore.*
+.vscode/*

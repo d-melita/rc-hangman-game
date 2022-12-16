@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <ctype.h>
 
 // DEFINES
 
@@ -85,12 +86,12 @@
 
 // Error messages (Consider adding '%s')
 
-#define ERR_INVALID_PLID "ERROR: Invalid player ID\n"
-#define ERR_INVALID_HOST "ERROR: Invalid hostname\n"
-#define ERR_INVALID_CMD "ERROR: Invalid command\n"
-#define ERR_INVALID_ARGS "ERROR: Invalid arguments\n"
-#define ERR_PROTOCOL "ERROR: Sprotocol message\n"
-#define ERR_UNKNOWN_CODE "ERROR: Unexpected response code\n"
+#define ERR_INVALID_PLID "ERROR: Invalid player ID"
+#define ERR_INVALID_HOST "ERROR: Invalid hostname"
+#define ERR_INVALID_CMD "ERROR: Invalid command"
+#define ERR_INVALID_ARGS "ERROR: Invalid arguments"
+#define ERR_PROTOCOL "ERROR: protocol message"
+#define ERR_UNKNOWN_CODE "ERROR: Unexpected response code"
 #define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
 #define ERR_INVALID_OPTION "ERROR: Invalid option\n"
 #define ERR_ONGOING_GAME "ERROR: There is an ongoing game. Type quit to terminate it since it is impossible to restore its status\n"
@@ -126,7 +127,7 @@
   "ERROR: There's no file to be sent or some other problem occured\n"
 #define ERR_CONNECTION                                                         \
   "ERROR: Communication with the server failed please retry later\n"
-#define ERR_TIMEOUT "ERROR: Timeout\n"
+#define ERR_TIMEOUT "Timeout reached and communication with server failed, please try again shortly\n"
 #define ERR_SELECT "ERROR: Select error\n"
 #define ERR_SCANF "ERROR: scanf error, EOF reached or empty string read.\n"
 #define ERR_SELECT_SOCKET "Error in select_socket function, unknown value for readWrite argument\n"
@@ -186,15 +187,6 @@ void get_file(int fd);
 /// \param signum signal number
 ///
 static void handler(int signum);
-
-/// Watch a socket for read/write availability, with a timeout.
-///
-/// \param fd file descriptor to be watched
-/// \param readWrite 1 if the socket is to be read, 0 if it is to be written
-/// \param timeout timeout in seconds
-///
-/// \returns 0 on success
-int select_socket(int fd, int readWrite, int timeout);
 
 /// Function to clear stdin.
 ///

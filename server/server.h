@@ -13,10 +13,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <signal.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <dirent.h>
 #include <time.h>
+#include <ctype.h>
 
 // DEFINES
 
