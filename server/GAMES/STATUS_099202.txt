@@ -1,1 +1,1 @@
-WIN JOKER joker.jpg JOKER
+ACT TOOTHBRUSH toothbrush.png TOOTH----H

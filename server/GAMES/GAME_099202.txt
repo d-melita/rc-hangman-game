@@ -1,1 +1,5 @@
-Word guess: JOKER
+Letter trial: A
+Letter trial: C
+Letter trial: T
+Letter trial: O
+Letter trial: H

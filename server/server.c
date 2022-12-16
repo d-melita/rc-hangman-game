@@ -494,6 +494,7 @@ void store_game(game_id *curr_game){
 }
 
 void add_scoreboard_line(struct game_id *curr_game){
+  int score, successfull_trials;
   puts("DEBUG: Adding new line to scoreboarddddddddddddd");
   FILE *fp = fopen(SCOREBOARD, "a");
   if (fp == NULL) {
@@ -501,9 +502,16 @@ void add_scoreboard_line(struct game_id *curr_game){
     exit(1);
   }
 
-  int successfull_trials = curr_game->game_data->trial - curr_game->game_data->errors;
-  int score = successfull_trials / curr_game->game_data->trial * 100;
+  successfull_trials = curr_game->game_data->trial - curr_game->game_data->errors;
+
+  printf("DEBUG: %d %d ST: %d\n", curr_game->game_data->trial, curr_game->game_data->errors, successfull_trials);
+
+  score = ((successfull_trials*100) / curr_game->game_data->trial);
+
   puts("DEBUG: Adding new line to scoreboard");
+
+  printf("%d\n", score);
+
   fprintf(fp, "%d %s %d %d %s\n", score, curr_game->plid, successfull_trials, curr_game->game_data->trial, curr_game->game_data->word);
   fclose(fp);
 }
