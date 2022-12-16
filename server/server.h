@@ -86,7 +86,7 @@ void delete_game(struct game_id* game_id);
 int word_played(char* word, struct guessed_word* guessed_words);
 void update_game_status(struct game_id *game, char* attempt, char* status);
 void store_game(struct game_id* game_id);
-void add_scoreboard_line(struct game_id *curr_game);
+void add_scoreboard_line(FILE* fp, struct game_id *curr_game);
 
 void message_tcp();
 char* state(char* plid, int fd);

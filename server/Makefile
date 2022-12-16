@@ -11,4 +11,4 @@ client: server.c server.o
 .PHONY: clean
 
 clean: 
-	rm -f *.o server *.jpg *.jpeg *.svg *.png
+	rm -f *.o server *.jpg *.jpeg *.svg *.png GAMES/*.txt SCOREBOARD.txt
