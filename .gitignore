@@ -50,3 +50,18 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Executables
+client/client
+server/server
+
+client/*.jpg
+cleint/*.jpeg
+client/*.png
+client/*.svg
+client/*.txt
+
+server/GAMES/*.txt
+server/SCOREBOARD.txt
+
+*/vgcore.*
