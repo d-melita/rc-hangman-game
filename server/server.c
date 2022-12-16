@@ -9,7 +9,7 @@ typedef struct game_data {
   int errors;
   int max_errors;
   int letters_guessed; // number of letters correctly guessed
-  char letters_played[31]; // 30 max word size + \0
+  char *letters_played; // 30 max word size + \0
   struct guessed_word *guesses;
 
   char last_letter[2];
@@ -251,6 +251,7 @@ char* play_letter(char *message) {
   buffer = (char*) malloc(256 * sizeof(char));
 
   sscanf(message, "%s %s %s %d\n", code, plid, letter, &trial);
+  printf("LETTER: %s\n", letter);
 
   if (verbose == 1)
     printf("Player %s requested to play letter %s.\n", plid, letter);
@@ -269,8 +270,8 @@ char* play_letter(char *message) {
         sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
       }
 
-                                  // 3: LETTER ALREADY PLAYED -> DUP
-    } else if (letter_in_word(game->letters_played, letter)) {
+    // 3: LETTER ALREADY PLAYED -> DUP
+    } else if (letter_in_word(game->letters_played, letter) == 1) {
       
       strcpy(status, DUP);
       sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
@@ -278,12 +279,11 @@ char* play_letter(char *message) {
     } else {
 
       // 4: LETTER IS IN WORD -> OK
-      if (letter_in_word(game->word, letter)) {
+      if (letter_in_word(game->word, letter) == 1) {
         char pos_str[31] = "";
         char test[2] = "";
         int n = 0;
 
-        strcpy(status, OK);
         for (int i = 0; i < strlen(game->word); i++) {
           if (game->word[i] == letter[0]) {
             sprintf(test, "%d", i+1);
@@ -297,31 +297,36 @@ char* play_letter(char *message) {
         // 4.1: WORD IS GUESSED -> WIN
         if (game->letters_guessed == strlen(game->word)) {
           strcpy(status, WIN);
+          sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
           update_game_status(game_id, letter, WIN);
           store_game(game_id);
           delete_game(game_id);
-        } else
+        } else{
           update_game_status(game_id, letter, ACT);
-
-        sprintf(buffer, "%s %s %d %d%s\n", RLG, status, game->trial++, n, pos_str);
+          strcpy(status, OK);
+          sprintf(buffer, "%s %s %d %d%s\n", RLG, status, game->trial++, n, pos_str);
+        }
 
       // 5: LETTER IS NOT IN WORD -> NOK
       } else {
-        strcpy(status, NOK);
         game->errors++;
 
         // 5.1: MAX ERRORS REACHED -> OVR
         if (game->errors == game->max_errors) {
           strcpy(status, OVR);
+          printf(buffer, "%s %s %d\n", RLG, status, game->trial);
           update_game_status(game_id, letter, OVR);
           store_game(game_id);
           delete_game(game_id);
-        } else 
+        } else{ 
           update_game_status(game_id, letter, ACT);
-
-        sprintf(buffer, "%s %s %d\n", RLG, status, game->trial++);
+          strcpy(status, NOK);
+          sprintf(buffer, "%s %s %d\n", RLG, status, game->trial++);
+        }  
       }
       strcpy(game->last_letter, letter);
+      game->letters_played[game->trial-1] = letter[0]; // add letter played to list
+      printf("aaaaaaaaa %s\n", game->letters_played[game->trial-1]);
     }
 
   } else {
@@ -375,7 +380,7 @@ char* guess_word(char *message) {
 
       if (strcmp(game->word, word) == 0){
         strcpy(status, WIN);
-        sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
+        sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
 
         game->letters_guessed = strlen(game->word); // TODO
         strcpy(game->word_status, game->word);
@@ -389,14 +394,15 @@ char* guess_word(char *message) {
         if (game->errors == game->max_errors){ // GAMEOVER
           strcpy(status, OVR);
           update_game_status(game_id, word, OVR);
+          sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
           store_game(game_id);
           delete_game(game_id);
         }
         else{ // FAIL BUT NOT GAMEOVER
           strcpy(status, NOK);
+          sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
           update_game_status(game_id, word, ACT);
         }
-        sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
       }
     }
   }
@@ -439,10 +445,14 @@ char* quit(char *message) {
 
 void store_game(game_id *curr_game){
   char line[256];
-  int trials = (curr_game->game_data->trial - 1);
+  int trials = (curr_game->game_data->trial);
 
   int successfull_trials = trials - curr_game->game_data->errors;
   int score = (int)((successfull_trials / (float)trials) * 100.0);
+
+  printf("errors %d\n", curr_game->game_data->errors);
+  printf("trials %d\n", trials);
+  printf("successfull_trials %d\n", successfull_trials);
 
   FILE *fp;
   if (access(SCOREBOARD, F_OK) == -1) {
@@ -516,7 +526,7 @@ void store_game(game_id *curr_game){
 
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
 
-  int trials = (curr_game->game_data->trial - 1);
+  int trials = (curr_game->game_data->trial);
 
   int successfull_trials = trials - curr_game->game_data->errors;
   int score = (int)((successfull_trials / (float)trials) * 100.0);
@@ -571,6 +581,7 @@ int set_game_word(game_data *game_data) {
   game_data->trial = 1;
   game_data->letters_guessed = 0;
   strcpy(game_data->last_letter, "");
+  game_data->letters_played = malloc(sizeof(char) * 27);
   strcpy(game_data->letters_played, "");
 
   for (int i = 0; i < word_length; i++) {
