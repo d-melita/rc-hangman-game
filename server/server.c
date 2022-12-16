@@ -251,8 +251,8 @@ char* play_letter(char *message) {
   buffer = (char*) malloc(256 * sizeof(char));
 
   sscanf(message, "%s %s %s %d\n", code, plid, letter, &trial);
-  printf("LETTER: %s\n", letter);
-
+  // TODO letter to upper case?
+  
   if (verbose == 1)
     printf("Player %s requested to play letter %s.\n", plid, letter);
 
@@ -277,20 +277,19 @@ char* play_letter(char *message) {
       sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
 
     } else {
-
       // 4: LETTER IS IN WORD -> OK
       if (letter_in_word(game->word, letter) == 1) {
         char pos_str[31] = "";
-        char test[2] = "";
-        int n = 0;
+        char test[5] = "";
+        int ocurrences = 0;
 
         for (int i = 0; i < strlen(game->word); i++) {
           if (game->word[i] == letter[0]) {
-            sprintf(test, "%d", i+1);
-            sprintf(pos_str, "%s %s", pos_str, test);
+            sprintf(test, " %d", i+1);
+            strcat(pos_str, test);
             game->letters_guessed++;
             game->word_status[i] = letter[0];
-            n++;
+            ocurrences++;
           }
         }
 
@@ -304,7 +303,7 @@ char* play_letter(char *message) {
         } else{
           update_game_status(game_id, letter, ACT);
           strcpy(status, OK);
-          sprintf(buffer, "%s %s %d %d%s\n", RLG, status, game->trial++, n, pos_str);
+          sprintf(buffer, "%s %s %d %d%s\n", RLG, status, game->trial++, ocurrences, pos_str);
         }
 
       // 5: LETTER IS NOT IN WORD -> NOK
@@ -314,7 +313,7 @@ char* play_letter(char *message) {
         // 5.1: MAX ERRORS REACHED -> OVR
         if (game->errors == game->max_errors) {
           strcpy(status, OVR);
-          printf(buffer, "%s %s %d\n", RLG, status, game->trial);
+          sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
           update_game_status(game_id, letter, OVR);
           store_game(game_id);
           delete_game(game_id);
@@ -325,8 +324,7 @@ char* play_letter(char *message) {
         }  
       }
       strcpy(game->last_letter, letter);
-      game->letters_played[game->trial-1] = letter[0]; // add letter played to list
-      printf("aaaaaaaaa %s\n", game->letters_played[game->trial-1]);
+      strcat(game->letters_played, letter); // add letter played to list
     }
 
   } else {
@@ -356,8 +354,9 @@ char* guess_word(char *message) {
   if (game_id != NULL){
     game_data *game = game_id->game_data;
     if (trial != game->trial){
-      if (trial == game->trial-1 && strcmp(game->guesses->word, word) == 0){
-        return NULL; // RESEND LAST GUESS RESPONSE
+      if (trial == game->trial-1 && game->guesses->word != NULL
+       && strcmp(game->guesses->word, word) == 0){
+        return NULL; // RESEND LAST GUESS RESPONSE TODO
       }
       else{
         strcpy(status, INV);
@@ -450,10 +449,6 @@ void store_game(game_id *curr_game){
   int successfull_trials = trials - curr_game->game_data->errors;
   int score = (int)((successfull_trials / (float)trials) * 100.0);
 
-  printf("errors %d\n", curr_game->game_data->errors);
-  printf("trials %d\n", trials);
-  printf("successfull_trials %d\n", successfull_trials);
-
   FILE *fp;
   if (access(SCOREBOARD, F_OK) == -1) {
     fp = fopen(SCOREBOARD, "w+"); // Create SB file if it doesn't exist
@@ -480,7 +475,7 @@ void store_game(game_id *curr_game){
   int temp_trials;
   int temp_succ_trials;
   char temp_word[31];
-  while (fgets(line, 256, fp) != NULL && counter < 10){
+  while (fgets(line, 256, fp) != NULL && counter < 11){
     sscanf(line, "%d %s %d %d %s", &temp_score, plid, &temp_succ_trials, &temp_trials, temp_word);
     if (done == 0) { // try to add new score
       // If the new score should steal the spot
@@ -491,12 +486,12 @@ void store_game(game_id *curr_game){
         done++;
       } 
     }
-    if (counter+1 < 10) { // if old score can still fit in
+    if (counter+1 < 11) { // if old score can still fit in
       fprintf(temp, "%s", line);
       ++counter;
     }
   }
-  if (done == 0 && counter < 10) // If all old scores were better, but theres still room
+  if (done == 0 && counter < 11) // If all old scores were better, but theres still room
     add_scoreboard_line(temp, curr_game);
 
   // Reset file pointers to the beginning of the files (and change modes)
@@ -607,8 +602,7 @@ game_id *get_game(char *plid) {
 
 // Function which checks if letter has already been played
 int letter_in_word(char *letters_guessed, char *letter) {
-  int i;
-  for (i = 0; i < strlen(letters_guessed); i++) {
+  for (int i = 0; i < strlen(letters_guessed); i++) {
     if (letters_guessed[i] == letter[0])
       return 1;
   }
@@ -637,9 +631,10 @@ void delete_game(game_id *game) {
 
 int word_played(char *word, guessed_word *guessed_words) {
 
-  while (guessed_words->word != NULL) {
-    if (strcmp(guessed_words->word, word) == 0)
-      return 1;
+  while (guessed_words != NULL) {
+    if (guessed_words->word != NULL)
+      if (strcmp(guessed_words->word, word) == 0)
+        return 1;
     guessed_words = guessed_words->prev;
   }
   return 0;
