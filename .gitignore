@@ -59,7 +59,7 @@ client/*.jpg
 cleint/*.jpeg
 client/*.png
 client/*.svg
-client/*.txt
+client/*.txt 
 
 server/GAMES/*.txt
 server/SCOREBOARD.txt
