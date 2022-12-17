@@ -291,11 +291,6 @@ void state_function() {
     return;
   }
 
-  if (game_ongoing == 0) {
-    printf(ERR_NO_GAME);
-    return;
-  }
-
   if (strcmp(plid, "") == 0) {
     printf(ERR_NO_PLID);
     return;
