@@ -6,7 +6,7 @@ DEPS= server.h
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 client: server.c server.o
-	$(CC) -o server server.o
+	$(CC) -o GS server.o
 
 .PHONY: clean
 

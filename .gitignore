@@ -52,8 +52,8 @@ Mkfile.old
 dkms.conf
 
 # Executables
-client/client
-server/server
+client/player
+server/GS
 
 client/*.jpg
 client/*.jpeg

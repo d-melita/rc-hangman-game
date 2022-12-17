@@ -6,7 +6,7 @@ DEPS= client.h
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 client: client.c client.o
-	$(CC) -o client client.o
+	$(CC) -o player client.o
 
 .PHONY: clean
 
