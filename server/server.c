@@ -951,7 +951,7 @@ void get_scoreboard(int fd){
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
 
   if (verbose == 1){
-    printf("Scoreboard requested\n");
+    printf("%s", SB_REQUESTED);
   }
 
   strcpy(filename, SCOREBOARD);
@@ -972,12 +972,35 @@ void get_scoreboard(int fd){
     send_message_tcp(fd, reply);
     free(filename);
     free(reply);
+    fclose(fp);
     return;
   }
 
+  FILE *temp = fopen(TEMP, "w");
+
+  int score, strials, trials, i = 1;
+  char plid[7];
+  char word[31];
+
+  fprintf(temp, "%s", SCOREBOARD_HEADER);
+  char line[256];
+  while (fgets(line, sizeof(line), fp)) {
+    sscanf(line, "%d %s %d %d %s", &score, plid, &strials, &trials, word);
+    fprintf(temp, "%d-  %d    %s            %d                %d          %s\n", i, score, plid, strials, trials, word);
+    i++;
+  }
+
+  fclose(temp);
+
+  temp = fopen(TEMP, "r");
+
+  fseek(temp, 0, SEEK_END);
+  fsize = ftell(temp);
+  fseek(temp, 0, SEEK_SET);
+
   // get file content
   char *file = (char*)malloc(fsize + 1);
-  fread(file, fsize, 1, fp);
+  fread(file, fsize, 1, temp);
 
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(filename) + fsize + 2);
   sprintf(reply, "%s %s %s %ld ", RSB, OK, filename, fsize);
@@ -986,6 +1009,11 @@ void get_scoreboard(int fd){
   send_file(fd, file, fsize);
   send_message_tcp(fd, "\n");
   free(reply);
+  free(file);
+  free(filename);
+  fclose(fp);
+  fclose(temp);
+  remove(TEMP);
 }
 
 /* --------------------------------------------------------------------------------------------------------------
