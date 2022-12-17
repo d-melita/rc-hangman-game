@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 
   printf("Server started on port %s\n", port);
   if (verbose)
-    printf("Verbose mode enabled\n");
+    printf("%s", VERBOSE);
 
   int pid = fork();
 
@@ -140,7 +140,7 @@ void message_udp() {
     buf[n] = '\0';
 
     if (verbose == 1) {
-      puts("New UDP message received");
+      printf("%s", UDP);
       printf("CLIENT IP: '%s';PORT: '%d'\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     }
 
@@ -183,7 +183,7 @@ char* parse_message_udp(char *message) {
   }
 
   else {
-    printf("ERROR: Invalid message code\n");
+    printf("%s", ERR_CODE);
     return NULL;
     // error
   }
@@ -417,11 +417,9 @@ char* quit(char *message) {
 
   game_id *curr_game = get_game(plid);
   if (curr_game == NULL) { // NO ACTIVE GAMES FOUND FOR PLAYER
-    printf("DEBUG: No active games found for player\n");
-
     strcpy(status, ERR);
-  } else { // ACTIVE GAME FOUND
-    store_game(curr_game);
+  } 
+  else { // ACTIVE GAME FOUND
     delete_game(curr_game); // DELETE GAME
     strcpy(status, OK);
   }
@@ -432,17 +430,21 @@ char* quit(char *message) {
   return buffer;
 }
 
+/* --------------------------------------------------------------------------------------------------------------
+
+
+                                    ADD GAME TO SCOREBOARD
+
+
+   --------------------------------------------------------------------------------------------------------------
+ */
+
 void store_game(game_id *curr_game){
   char line[256];
   int trials = (curr_game->game_data->trial);
 
   int successfull_trials = trials - curr_game->game_data->errors;
   int score = (int)((successfull_trials / (float)trials) * 100.0);
-
-  if (curr_game->game_data->letters_guessed == 0
-   && curr_game->game_data->guesses->word == NULL){
-    score = 0;
-  }
 
   FILE *fp;
   if (access(SCOREBOARD, F_OK) == -1) {
@@ -455,7 +457,7 @@ void store_game(game_id *curr_game){
     exit(1);
   }
 
-  FILE* temp = fopen("temp.txt", "w"); // Create temporary auxiliary file
+  FILE* temp = fopen(TEMP, "w"); // Create temporary auxiliary file
   if (temp == NULL) {
     perror("fopen");
     exit(1);
@@ -490,7 +492,7 @@ void store_game(game_id *curr_game){
 
   // Reset file pointers to the beginning of the files (and change modes)
   fclose(temp);
-  temp = fopen("temp.txt", "r");
+  temp = fopen(TEMP, "r");
   if (temp == NULL) {
     perror("fopen");
     exit(1);
@@ -510,7 +512,7 @@ void store_game(game_id *curr_game){
   fclose(fp);
   fclose(temp);
 
-  remove("temp.txt"); // delete auxiliary file
+  remove(TEMP); // delete auxiliary file
 }
 
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
@@ -527,6 +529,15 @@ void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
 
   fprintf(fp, "%d %s %d %d %s\n", score, curr_game->plid, successfull_trials, curr_game->game_data->trial, curr_game->game_data->word);
 }
+
+/* --------------------------------------------------------------------------------------------------------------
+
+
+                                  SERVER UDP AUXILIAR FUNCTIONS
+
+
+   --------------------------------------------------------------------------------------------------------------
+ */
 
 // Returns the length of the word
 int set_game_word(game_data *game_data) {
@@ -646,7 +657,7 @@ int word_played(char *word, guessed_word *guessed_words) {
 /* --------------------------------------------------------------------------------------------------------------
 
 
-                                                SERVER TCP FUNCTIONS
+                                    UPDATE GAME STATUS
 
 
    --------------------------------------------------------------------------------------------------------------
@@ -656,8 +667,8 @@ void update_game_status(game_id *game, char* attempt, char* status) {
   char filename[256];
   char st_filename[256];
 
-  sprintf(filename, "GAMES/GAME_%s.txt", game->plid);
-  sprintf(st_filename, "GAMES/STATUS_%s.txt", game->plid);
+  sprintf(filename, GAMES, game->plid);
+  sprintf(st_filename, GAMES_STATUS, game->plid);
 
   // Write current game status, word and word file to gamestatus file
   FILE *fp = fopen(st_filename, "w");
@@ -678,9 +689,9 @@ void update_game_status(game_id *game, char* attempt, char* status) {
     }
 
     if (strlen(attempt) == 1) // Letter trial
-      fprintf(fp, "Letter trial: %s\n", attempt);
+      fprintf(fp, "%s%s\n", LETTER_TRIAL, attempt);
     else // Word trial
-      fprintf(fp, "Word guess: %s\n", attempt);
+      fprintf(fp, "%s%s\n", WORD_GUESS,attempt);
   } else {
     fp = fopen(filename, "w");
     if (fp == NULL) {
@@ -691,88 +702,14 @@ void update_game_status(game_id *game, char* attempt, char* status) {
   fclose(fp);
 }
 
-/* Function which writes to file in directory GAMES and file game_plid.txt 
-* the current state of the game.
-*/
-char* state(char* plid, int fd) {
-  char filename[256]; // File with game history
-  char st_filename[256]; // File with game status
-  char trans_buffer[5024] = ""; // Temporary buffer for all the attempts taken
-  char temp[256];
-  char* reply = (char*)malloc(5024 * sizeof(char));
-  char* file = (char*)malloc(5024 * sizeof(char));
+/* --------------------------------------------------------------------------------------------------------------
 
-  sprintf(st_filename, "GAMES/STATUS_%s.txt", plid);
-  // Check if file exists 
-  if (access(st_filename, F_OK) == -1) {
-    sprintf(reply, "%s %s\n", RST, NOK);
-    return reply;
-  }
-  FILE *fp = fopen(st_filename, "r"); // Open file with game status
-  if (fp == NULL) {
-    perror("fopen");
-    exit(1);
-  }
 
-  char game_status[6];
-  char word[31];
-  char word_file[64];
-  char word_status[31];
-  fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status);
-  fclose(fp);
+                                                SERVER TCP FUNCTIONS
 
-  if (strcmp(game_status, OVR) == 0) // ask the teachers about this lmfao
-    strcpy(game_status, "FAIL");
 
-  sprintf(filename, "GAMES/GAME_%s.txt", plid);
-  fp = fopen(filename, "r"); // Open file with plays
-  if (fp == NULL) {
-    perror("fopen");
-    exit(1);
-  } 
-
-  int trials = 0;
-  // Read every line from filename and append them to transbuffer, while increasing trials
-  while (fgets(temp, 256, fp) != NULL) {
-    trials++;
-    strcat(trans_buffer, temp);
-  }
-
-  int ongoing_game = 1;
-  if (strcmp(game_status, WIN) == 0 || strcmp(game_status, OVR) == 0)
-    ongoing_game = 0;
-
-  int n = 0;
-  if (ongoing_game == 0) {
-    n=sprintf(file, "Last finalized game for player %s\n", plid);
-    n+=sprintf(file+n, "Word: %s Hint file: %s\n", word, word_file);
-    n+=sprintf(file+n, "%d transactions found:\n", trials);
-  } else {
-    n+=sprintf(file+n, "Active game found for player %s\n", plid);
-    if (trials == 0) // no transaction found in file
-      n+=sprintf(file+n, "Game started - no transactions found\n");
-    else
-      n+=sprintf(file+n, "--- Transactions found: %d---\n", trials);
-  }
-  
-  if (trials > 0)
-    n+=sprintf(file+n, "%s", trans_buffer);
-
-  sprintf(filename, "STATE_%s.txt", plid);
-  if (ongoing_game == 0) {
-    n+=sprintf(file+n, "TERMINATION: %s\n", game_status);
-    sprintf(reply, "%s %s %s %ld ", RST, FIN, filename, strlen(file));
-  } else {
-    n+=sprintf(file+n, "Solved so far: %s\n", word_status);
-    sprintf(reply, "%s %s %s %ld ", RST, ACT, filename, strlen(file));
-  }
-
-  send_message_tcp(fd, reply);
-  send_file(fd, file, strlen(file));
-  free(file);
-  free(reply);
-  fclose(fp);
-}
+   --------------------------------------------------------------------------------------------------------------
+ */
 
 void message_tcp() {
   int fd, newfd, errcode;
@@ -830,7 +767,7 @@ void message_tcp() {
       exit(1);
     }
 
-    parse_tcp(buffer, newfd);
+    parse_message_tcp(buffer, newfd);
 
     close(newfd);
   }
@@ -839,7 +776,7 @@ void message_tcp() {
   freeaddrinfo(res);
 }
 
-void parse_tcp(char *message, int fd){
+void parse_message_tcp(char *message, int fd){
   char code[4];
   char plid[7];
 
@@ -861,11 +798,103 @@ void parse_tcp(char *message, int fd){
   }
 }
 
+/* Function which writes to file in directory GAMES and file game_plid.txt 
+* the current state of the game.
+*/
+char* state(char* plid, int fd) {
+  char filename[256]; // File with game history
+  char st_filename[256]; // File with game status
+  char trans_buffer[5024] = ""; // Temporary buffer for all the attempts taken
+  char temp[256];
+  char* reply = (char*)malloc(5024 * sizeof(char));
+  char* file = (char*)malloc(5024 * sizeof(char));
+
+  if (verbose == 1){
+    printf("Player %s requested game state\n", plid);
+  }
+
+  sprintf(st_filename, GAMES_STATUS, plid);
+  // Check if file exists 
+  if (access(st_filename, F_OK) == -1) {
+    sprintf(reply, "%s %s\n", RST, NOK);
+    return reply;
+  }
+  FILE *fp = fopen(st_filename, "r"); // Open file with game status
+  if (fp == NULL) {
+    perror("fopen");
+    exit(1);
+  }
+
+  char game_status[6];
+  char word[31];
+  char word_file[64];
+  char word_status[31];
+  fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status);
+  fclose(fp);
+
+  if (strcmp(game_status, OVR) == 0) // ask the teachers about this lmfao
+    strcpy(game_status, FAIL);
+
+  sprintf(filename, GAMES, plid);
+  fp = fopen(filename, "r"); // Open file with plays
+  if (fp == NULL) {
+    perror("fopen");
+    exit(1);
+  } 
+
+  int trials = 0;
+  // Read every line from filename and append them to transbuffer, while increasing trials
+  while (fgets(temp, 256, fp) != NULL) {
+    trials++;
+    strcat(trans_buffer, temp);
+  }
+
+  int ongoing_game = 1;
+  if (strcmp(game_status, WIN) == 0 || strcmp(game_status, OVR) == 0)
+    ongoing_game = 0;
+
+  int n = 0;
+  if (ongoing_game == 0) {
+    n=sprintf(file, LAST_FIN_GAME, plid);
+    n+=sprintf(file+n, WORD_HINT, word, word_file);
+    n+=sprintf(file+n, TRANSACTIONS, trials);
+  } else {
+    n+=sprintf(file+n, ACTIVE_GAME, plid);
+    if (trials == 0) // no transaction found in file
+      n+=sprintf(file+n, GAME_STARTED);
+    else
+      n+=sprintf(file+n, TRANSACTIONS_FOUND, trials);
+  }
+  
+  if (trials > 0)
+    n+=sprintf(file+n, "%s", trans_buffer);
+
+  sprintf(filename, STATE, plid);
+  if (ongoing_game == 0) {
+    n+=sprintf(file+n, TERMINATION, game_status);
+    sprintf(reply, "%s %s %s %ld ", RST, FIN, filename, strlen(file));
+  } else {
+    n+=sprintf(file+n, SOLVED_SO_FAR, word_status);
+    sprintf(reply, "%s %s %s %ld ", RST, ACT, filename, strlen(file));
+  }
+
+  send_message_tcp(fd, reply);
+  send_file(fd, file, strlen(file));
+  free(file);
+  free(reply);
+  fclose(fp);
+}
+
 void get_hint(int fd, char* plid){
   char status[4];
   char st_filename[64];
   char *reply;
-  sprintf(st_filename, "GAMES/STATUS_%s.txt", plid);
+
+  if (verbose == 1){
+    printf("Player %s requested hint\n", plid);
+  }
+
+  sprintf(st_filename, GAMES_STATUS, plid);
 
   FILE *fp = fopen(st_filename, "r"); // Open file with game status
   if (fp == NULL) {
@@ -917,23 +946,14 @@ void get_hint(int fd, char* plid){
   free(reply);
 }
 
-void send_message_tcp(int fd, char* message){
-  ssize_t n = write(fd, message, strlen(message));
-  while (n < strlen(message)) {
-    n += write(fd, message+n, strlen(message)-n);
-  }
-}
-
-void send_file(int fd, char* file, int fsize){
-  ssize_t n = write(fd, file, fsize);
-  while (n < fsize) {
-    n += write(fd, file+n, fsize-n);
-  }
-}
-
 void get_scoreboard(int fd){
   char *reply;
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
+
+  if (verbose == 1){
+    printf("Scoreboard requested\n");
+  }
+
   strcpy(filename, SCOREBOARD);
 
   FILE *fp = fopen(filename, "r");
@@ -966,4 +986,27 @@ void get_scoreboard(int fd){
   send_file(fd, file, fsize);
   send_message_tcp(fd, "\n");
   free(reply);
+}
+
+/* --------------------------------------------------------------------------------------------------------------
+
+
+                                  SERVER AUXILIAR TCP FUNCTIONS
+
+
+   --------------------------------------------------------------------------------------------------------------
+ */
+
+void send_message_tcp(int fd, char* message){
+  ssize_t n = write(fd, message, strlen(message));
+  while (n < strlen(message)) {
+    n += write(fd, message+n, strlen(message)-n);
+  }
+}
+
+void send_file(int fd, char* file, int fsize){
+  ssize_t n = write(fd, file, fsize);
+  while (n < fsize) {
+    n += write(fd, file+n, fsize-n);
+  }
 }
