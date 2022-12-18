@@ -1,4 +1,4 @@
-#include "client.h"
+#include "player.h"
 
 char ip[16];
 char port[6];

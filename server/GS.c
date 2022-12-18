@@ -1,4 +1,4 @@
-#include "server.h"
+#include "GS.h"
 
 // STRUCT FOR MATCH
 
@@ -18,10 +18,8 @@ typedef struct game_data {
 
 typedef struct game_id {
   char plid[7];
-  struct game_data *game_data;
-  // struct game_data *last_game;
   struct game_id *next;
-  struct game_id *prev;
+  struct game_data *game_data;
 } game_id;
 
 typedef struct guessed_word {
@@ -29,14 +27,102 @@ typedef struct guessed_word {
   struct guessed_word *prev;
 } guessed_word;
 
-game_id *games = NULL;
+int table_size = DEFAULT_TABLE_SIZE;
+int num_games = 0;
+game_id** games; // array of game_id pointers
+
+// Functions related to table
+
+int hash(char* plid) {
+  return atoi(plid) % table_size;
+}
+
+int set_game(char* plid) {
+  int word_length = -1;
+  int hash_value = hash(plid);
+  game_id* curr = get_game(plid);
+  game_id* prev = NULL;
+
+  while (curr != NULL && strcmp(curr->plid, plid) != 0) {
+    prev = curr;
+    curr = curr->next;
+  }
+
+  if (curr == NULL) {
+    printf("Creating new game for player %s\n", plid);
+    curr = (game_id*) malloc(sizeof(game_id));
+    strcpy(curr->plid, plid);
+    curr->next = NULL;
+  }
+  curr->game_data = malloc(sizeof(game_data));
+
+  word_length = set_game_data(curr);
+
+  if (num_games >= (table_size/2)) {
+    if (resize_table() != 0)
+      return 1;
+  }
+
+  if (prev != NULL)
+    prev->next = curr;
+  else
+    games[hash_value] = curr;
+
+  num_games++;
+  return 0;
+}
+
+int resize_table() { // TODO TEST IF WORKS
+  game_id** new_table = malloc(sizeof(game_id*) * table_size * 2);
+  if (new_table == NULL) {
+    perror("malloc");
+    return 1;
+  }
+  memset(new_table, 0, sizeof(game_id*) * table_size * 2); 
+
+  int old_size = table_size;
+  table_size *= 2;
+  for (int i = 0; i < old_size; i++) {
+    game_id* curr = games[i];
+    game_id* prev = NULL;
+    while (curr != NULL) {
+      int new_hash = hash(curr->plid);
+      // Update the pointer on new table to old pointer
+      game_id* new_game = new_table[new_hash];
+      new_table[new_hash] = curr;
+      if (prev != NULL)
+        prev->next = new_game;
+      curr = curr->next;
+    }
+  }
+
+  free(games);
+  games = new_table;
+  return 0;
+}
+
+int delete_table() {
+  for (int i = 0; i < table_size; i++) {
+    game_id* curr = games[i];
+    game_id* prev = NULL;
+    while (curr != NULL) {
+      prev = curr;
+      curr = curr->next;
+      free(prev);
+    }
+  }
+  free(games);
+  return 0;
+}
 
 char port[6];
 int verbose = 0; // 0 false, 1 true
 
 int main(int argc, char *argv[]) {
-
   parse_args(argc, argv);
+
+  signal(SIGINT, handler);
+
 
   printf("Server started on port %s\n", port);
   if (verbose)
@@ -49,6 +135,13 @@ int main(int argc, char *argv[]) {
     message_tcp();
   } else if (pid > 0) {
     // Parent process
+    games = malloc(sizeof(game_id*) * DEFAULT_TABLE_SIZE);
+    if (games == NULL) {
+      perror("malloc");
+      exit(1);
+    }
+    memset(games, 0, sizeof(game_id*) * DEFAULT_TABLE_SIZE);
+
     message_udp();
   } else {
     // Error
@@ -202,22 +295,14 @@ char* start_new_game(char *message) {
   if (verbose == 1)
     printf("Player %s requested a new game.\n", plid);
 
-  // FIND GAME WITH PLID
-  game_id *curr_game = get_game(plid);
-
+  game_id *curr_game = get_game(plid);  
   if (curr_game == NULL || curr_game->game_data == NULL) { // PLAYER HAS NO ONGOING GAME
-    if (curr_game == NULL) {
-      curr_game = malloc(sizeof(game_id));
-      strcpy(curr_game->plid, plid);
-      curr_game->next = games;
-    }
-    curr_game->game_data = malloc(sizeof(game_data));
+    if (set_game(plid) != 0)
+      exit(1);
 
-    if (games != NULL) // Set new game at the start of the list
-      games->prev = curr_game;
-    games = curr_game;
+    curr_game = get_game(plid);
+    word_length = strlen(curr_game->game_data->word);
 
-    word_length = set_game_word(curr_game->game_data);
     strcpy(status, OK);
 
     sprintf(response, "%s %s %d %d\n", RSG, status, word_length, MAX_ERRORS);
@@ -248,7 +333,7 @@ char* play_letter(char *message) {
     printf("Player %s requested to play letter %s.\n", plid, letter);
 
   game_id *game_id = get_game(plid);
-  if (game_id != NULL) {          // 1: THERES AN ACTIVE GAME FOR PLAYER
+  if (game_id != NULL && game_id->game_data != NULL) {          // 1: THERES AN ACTIVE GAME FOR PLAYER
     game_data *game = game_id->game_data;
 
     if (trial != game->trial) {   // 2: TRIAL NUMBER DOESNT MATCH -> INV
@@ -342,8 +427,9 @@ char* guess_word(char *message) {
   }
 
   game_id *game_id = get_game(plid);
-  if (game_id != NULL){
+  if (game_id != NULL && game_id->game_data != NULL){
     game_data *game = game_id->game_data;
+    
     if (trial != game->trial){
       if (trial == game->trial-1 && game->guesses->word != NULL
        && strcmp(game->guesses->word, word) == 0){
@@ -540,7 +626,7 @@ void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
  */
 
 // Returns the length of the word
-int set_game_word(game_data *game_data) {
+int set_game_data(game_id * game_id) {
   char word[31];
   char file[64];
   int i;
@@ -568,6 +654,9 @@ int set_game_word(game_data *game_data) {
   }
 
   word_length = strlen(word);
+
+  game_data* game_data = (struct game_data*) malloc(sizeof(struct game_data));
+  game_id->game_data = game_data;
 
   // set game data
   game_data->word = malloc((word_length + 1) * sizeof(char));
@@ -603,14 +692,12 @@ int set_game_word(game_data *game_data) {
 }
 
 game_id *get_game(char *plid) {
-  game_id *curr_game = games;
-
+  game_id *curr_game = games[hash(plid)];
   while (curr_game != NULL) {
     if (strcmp(curr_game->plid, plid) == 0)
       return curr_game;
     curr_game = curr_game->next;
   }
-
   return NULL;
 }
 
@@ -757,19 +844,26 @@ void message_tcp() {
       perror("accept");
       exit(1);
     }
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-    
-    puts("Connection accepted");
+    setsockopt(newfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
-    n = read(newfd, buffer, 256);
-    if (n == -1) {
-      perror("read");
+    pid_t pid = fork();
+    if (pid == -1) {
+      perror("fork");
       exit(1);
     }
+    if (pid == 0) { // Child process
+      puts("Connection accepted");
 
-    parse_message_tcp(buffer, newfd);
+      n = read(newfd, buffer, 256); // TODO VALGRIND WARN
+      if (n == -1) {
+        perror("read");
+        exit(1);
+      }
+      parse_message_tcp(buffer, newfd);
 
-    close(newfd);
+      close(newfd);
+      exit(0);
+    }
   }
 
   close(fd);
@@ -781,7 +875,6 @@ void parse_message_tcp(char *message, int fd){
   char plid[7];
 
   sscanf(message, "%s", code);
-  puts(code);
 
   if (strcmp(code, GSB) == 0){
     get_scoreboard(fd);
@@ -919,7 +1012,7 @@ void get_hint(int fd, char* plid){
   fp = fopen(filename, "r");
   if (access(filename, F_OK) == -1 || access(filename, R_OK) == -1) {
     printf(FILE_DNE);
-    reply = (char*)malloc(strlen(RHL) + strlen(NOK) + 2);
+    reply = (char*)malloc(strlen(RHL) + 1 + strlen(NOK) + 2);
     sprintf(reply, "%s %s\n", RHL, NOK);
     send_message_tcp(fd, reply);
     free(reply);
@@ -937,6 +1030,8 @@ void get_hint(int fd, char* plid){
   char *file = (char*)malloc(fsize + 1);
   fread(file, fsize, 1, fp);
 
+  fclose(fp);
+
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize +5);
   sprintf(reply, "%s %s %s %ld ", RHL, OK, word_file, fsize);
 
@@ -951,7 +1046,7 @@ void get_scoreboard(int fd){
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
 
   if (verbose == 1){
-    printf("Scoreboard requested\n");
+    printf("%s", SB_REQUESTED);
   }
 
   strcpy(filename, SCOREBOARD);
@@ -975,9 +1070,26 @@ void get_scoreboard(int fd){
     return;
   }
 
+  FILE *temp = fopen(TEMP, "w+");
+
+  int score, strials, trials, i = 1;
+  char plid[7];
+  char word[31];
+
+  fprintf(temp, "%s", SCOREBOARD_HEADER);
+  char line[256];
+  while (fgets(line, sizeof(line), fp)) {
+    sscanf(line, "%d %s %d %d %s", &score, plid, &strials, &trials, word);
+    fprintf(temp, "%d-  %d    %s            %d                %d          %s\n", i, score, plid, strials, trials, word);
+    i++;
+  }
+
+  fsize = ftell(temp);
+  fseek(temp, 0, SEEK_SET);
+
   // get file content
   char *file = (char*)malloc(fsize + 1);
-  fread(file, fsize, 1, fp);
+  fread(file, fsize, 1, temp);
 
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(filename) + fsize + 2);
   sprintf(reply, "%s %s %s %ld ", RSB, OK, filename, fsize);
@@ -985,7 +1097,13 @@ void get_scoreboard(int fd){
   send_message_tcp(fd, reply);
   send_file(fd, file, fsize);
   send_message_tcp(fd, "\n");
+  
   free(reply);
+  free(file);
+  free(filename);
+  fclose(fp);
+  fclose(temp);
+  remove(TEMP);
 }
 
 /* --------------------------------------------------------------------------------------------------------------
@@ -1008,5 +1126,16 @@ void send_file(int fd, char* file, int fsize){
   ssize_t n = write(fd, file, fsize);
   while (n < fsize) {
     n += write(fd, file+n, fsize-n);
+  }
+}
+
+static void handler(int signum) {
+  switch (signum) {
+  case SIGINT:
+    printf("Server shutting down...\n");
+    delete_table();
+    exit(0);
+  default:
+    printf("IGNORING_SIGNAL\n");
   }
 }

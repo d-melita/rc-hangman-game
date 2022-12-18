@@ -25,6 +25,7 @@
 #define GN 90 // group number
 #define MAX_ERRORS 8 // Maximum number of errors allowed
 #define SIZE_WORDFILE 10
+#define DEFAULT_TABLE_SIZE 15625 // max 64 collisions, 125kb
 
 // CODES
 #define SNG "SNG"
@@ -91,12 +92,19 @@
 #define ERR_INVALID_OPTION "ERROR: Invalid option\n"
 #define FILE_DNE "ERROR: File does not exist\n"
 
+// SCOREBOARD HEADER
+#define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"
+
 
 // prototypes
 // structs
 struct game_data;
 struct game_id;
 struct guessed_word;
+
+int hash(char* plid);
+int set_game(char* plid);
+int resize_table();
 
 void parse_args(int argc, char *argv[]);
 
@@ -113,7 +121,7 @@ void store_game(struct game_id* game_id);
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game);
 
 // aux functions to UDP functions
-int set_game_word(struct game_data* game_data);
+int set_game_data(struct game_id* game_id);
 struct game_id* get_game(char* plid);
 int letter_in_word(char* word, char* letter);
 void delete_game(struct game_id* game_id);
@@ -132,5 +140,9 @@ void get_scoreboard(int fd);
 // aux functions to TCP functions
 void send_message_tcp(int fd, char* message);
 void send_file(int fd, char* file, int fsize);
+
+int delete_table();
+
+static void handler(int signum);
 
 #endif
