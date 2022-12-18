@@ -18,7 +18,7 @@ typedef struct game_data {
 
 typedef struct game_id {
   char plid[7];
-  struct game_id *next;
+  struct game_id *prev;
   struct game_data *game_data;
 } game_id;
 
@@ -43,16 +43,11 @@ int set_game(char* plid) {
   game_id* curr = get_game(plid);
   game_id* prev = NULL;
 
-  while (curr != NULL && strcmp(curr->plid, plid) != 0) {
-    prev = curr;
-    curr = curr->next;
-  }
-
   if (curr == NULL) {
     printf("Creating new game for player %s\n", plid);
     curr = (game_id*) malloc(sizeof(game_id));
     strcpy(curr->plid, plid);
-    curr->next = NULL;
+    curr->prev = games[hash_value];
   }
   curr->game_data = malloc(sizeof(game_data));
 
@@ -63,10 +58,7 @@ int set_game(char* plid) {
       return 1;
   }
 
-  if (prev != NULL)
-    prev->next = curr;
-  else
-    games[hash_value] = curr;
+  games[hash_value] = curr;
 
   num_games++;
   return 0;
@@ -83,16 +75,15 @@ int resize_table() { // TODO TEST IF WORKS
   int old_size = table_size;
   table_size *= 2;
   for (int i = 0; i < old_size; i++) {
-    game_id* curr = games[i];
+    game_id* curr = games[i]; // TODO incorrect
     game_id* prev = NULL;
     while (curr != NULL) {
       int new_hash = hash(curr->plid);
-      // Update the pointer on new table to old pointer
-      game_id* new_game = new_table[new_hash];
-      new_table[new_hash] = curr;
-      if (prev != NULL)
-        prev->next = new_game;
-      curr = curr->next;
+      game_id* new_game = new_table[new_hash]; // get the game at new hash
+      prev = curr->prev; // save pointer next pointer
+      curr->prev = new_game; // join the new collision chain
+      new_table[new_hash] = curr; // set it atop
+      curr = prev; // go to next
     }
   }
 
@@ -104,11 +95,11 @@ int resize_table() { // TODO TEST IF WORKS
 int delete_table() {
   for (int i = 0; i < table_size; i++) {
     game_id* curr = games[i];
-    game_id* prev = NULL;
+    game_id* last = NULL;
     while (curr != NULL) {
-      prev = curr;
-      curr = curr->next;
-      free(prev);
+      last = curr;
+      curr = curr->prev;
+      free(last);
     }
   }
   free(games);
@@ -122,7 +113,6 @@ int main(int argc, char *argv[]) {
   parse_args(argc, argv);
 
   signal(SIGINT, handler);
-
 
   printf("Server started on port %s\n", port);
   if (verbose)
@@ -696,7 +686,7 @@ game_id *get_game(char *plid) {
   while (curr_game != NULL) {
     if (strcmp(curr_game->plid, plid) == 0)
       return curr_game;
-    curr_game = curr_game->next;
+    curr_game = curr_game->prev;
   }
   return NULL;
 }
