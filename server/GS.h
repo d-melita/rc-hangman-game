@@ -66,6 +66,9 @@
 #define UDP "New UDP message received\n"
 #define SB_REQUESTED "Scoreboard requested\n"
 
+// SCOREBOARD HEADER
+#define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"
+
 // FILES 
 #define SCOREBOARD "SCOREBOARD.txt"
 #define TEMP "temp.txt"

@@ -1067,6 +1067,7 @@ void get_scoreboard(int fd){
     send_message_tcp(fd, reply);
     free(filename);
     free(reply);
+    fclose(fp);
     return;
   }
 
