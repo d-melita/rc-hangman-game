@@ -26,6 +26,7 @@
 #define MAX_ERRORS 8 // Maximum number of errors allowed
 #define SIZE_WORDFILE 10
 #define DEFAULT_TABLE_SIZE 15625 // max 64 collisions, 125kb
+#define MAX_TABLE_SIZE 1000000 // 1mb
 
 // CODES
 #define SNG "SNG"
