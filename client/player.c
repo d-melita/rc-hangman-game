@@ -214,6 +214,7 @@ void play_function() {
 
   if (game_ongoing == 0) {
     printf(ERR_NO_GAME);
+    free(message);
     return;
   }
 
@@ -235,7 +236,6 @@ void guess_function() {
   }
   if (clear_input() == 1) {
     puts(ERR_INVALID_ARGS);
-    free(message);
     return;
   }
 
@@ -611,6 +611,7 @@ int read_buffer2string(int fd, char *string) {
   }
   buffer[bytes++] = '\0';
   strcpy(string, buffer);
+  free(buffer);
   return bytes;
 }
 
