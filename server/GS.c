@@ -9,7 +9,7 @@ typedef struct game_data {
   int errors;
   int max_errors;
   int letters_guessed; // number of letters correctly guessed
-  char *letters_played; // 30 max word size + \0
+  char letters_played[31]; // 30 max word size + \0
   struct guessed_word *guesses;
 
   char last_letter[2];
@@ -31,6 +31,9 @@ int table_size = DEFAULT_TABLE_SIZE;
 int num_games = 0;
 game_id** games; // array of game_id pointers
 
+int tcp = 0;
+struct addrinfo hints, *res;
+
 // Functions related to table
 
 int hash(char* plid) {
@@ -49,7 +52,6 @@ int set_game(char* plid) {
     strcpy(curr->plid, plid);
     curr->prev = games[hash_value];
   }
-  curr->game_data = malloc(sizeof(game_data));
 
   word_length = set_game_data(curr);
 
@@ -75,7 +77,7 @@ int resize_table() { // TODO TEST IF WORKS
   int old_size = table_size;
   table_size *= 2;
   for (int i = 0; i < old_size; i++) {
-    game_id* curr = games[i]; // TODO incorrect
+    game_id* curr = games[i]; // TODO
     game_id* prev = NULL;
     while (curr != NULL) {
       int new_hash = hash(curr->plid);
@@ -99,6 +101,7 @@ int delete_table() {
     while (curr != NULL) {
       last = curr;
       curr = curr->prev;
+      delete_game(last);
       free(last);
     }
   }
@@ -124,6 +127,7 @@ int main(int argc, char *argv[]) {
 
   if (pid == 0) {
     // Child process
+    tcp = 1;
     message_tcp();
   } else if (pid > 0) {
     // Parent process
@@ -183,7 +187,6 @@ void message_udp() {
   int fd, errcode;
   int n;
   socklen_t addrlen;
-  struct addrinfo hints, *res;
   struct sockaddr_in addr;
   char buf[256];
   char *response;
@@ -239,9 +242,12 @@ void message_udp() {
     if (verbose == 1) {
       printf("SENT: '%s'\n", response);
     }
+
+    free(response);
   }
-  free(response);
   close(fd);
+
+  freeaddrinfo(res);
 }
 
 char* parse_message_udp(char *message) {
@@ -640,14 +646,18 @@ int set_game_data(game_id * game_id) {
   // for (i = 0; i <= random_number; i++) {
   //   fscanf(fp, "%s %s", word, file);
   // }
-  fseek(fp, 0, SEEK_END);
-  int size = ftell(fp);
-  fseek(fp, 0, SEEK_SET);
 
   for (i = 0; i <= count; i++) {
-     fscanf(fp, "%s %s", word, file);
+    if (fscanf(fp, "%s %s", word, file) == EOF) {
+      fseek(fp, 0, SEEK_SET); // go to the beginning of the file
+      count = 0;
+      if (fscanf(fp, "%s %s", word, file) == EOF) {
+        perror("fscanf");
+        exit(1); // thats not supposed to happen
+      }
+    }
+    count++;
   }
-  count = (count + 1) % size;
 
   for (i = 0; i < strlen(word); i++) {
     word[i] = toupper(word[i]);
@@ -679,7 +689,6 @@ int set_game_data(game_id * game_id) {
   game_data->trial = 1;
   game_data->letters_guessed = 0;
   strcpy(game_data->last_letter, "");
-  game_data->letters_played = malloc(sizeof(char) * 27);
   strcpy(game_data->letters_played, "");
 
   for (int i = 0; i < word_length; i++) {
@@ -711,23 +720,25 @@ int letter_in_word(char *letters_guessed, char *letter) {
 }
 
 void delete_game(game_id *game) {
+
   // Free everything in game_data
-  free(game->game_data->word);
-  free(game->game_data->file);
+  if (game->game_data != NULL) {
+    free(game->game_data->word);
+    free(game->game_data->file);
 
-  guessed_word* curr_word = game->game_data->guesses;
-  guessed_word* last_word = NULL;
-  while(curr_word->word != NULL) {
-    last_word = curr_word;
-    curr_word = curr_word->prev;
-    free(last_word->word);
-    free(last_word);
+    guessed_word* curr_word = game->game_data->guesses;
+    guessed_word* last_word = NULL;
+    while(curr_word != NULL) {
+      last_word = curr_word;
+      curr_word = curr_word->prev;
+      free(last_word->word);
+      free(last_word);
+    }
+
+    free(game->game_data);
+
+    game->game_data = NULL;
   }
-
-  free(game->game_data->guesses);
-  free(game->game_data);
-
-  game->game_data = NULL;
 }
 
 int word_played(char *word, guessed_word *guessed_words) {
@@ -803,7 +814,6 @@ void message_tcp() {
   ssize_t n;
   socklen_t addrlen;
   struct sockaddr_in addr;
-  struct addrinfo hints, *res;
   char buffer[256];
   char *response;
 
@@ -922,7 +932,10 @@ char* state(char* plid, int fd) {
   char word[31];
   char word_file[64];
   char word_status[31];
-  fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status);
+  if (fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status) == EOF) {
+    perror("fscanf");
+    exit(1);
+  }
   fclose(fp);
 
   if (strcmp(game_status, OVR) == 0) // ask the teachers about this lmfao
@@ -999,7 +1012,10 @@ void get_hint(int fd, char* plid){
   char word[31];
   char word_file[64];
   char word_status[31];
-  fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status);
+  if (fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status) == EOF) {
+    perror("fscanf");
+    exit(1);
+  }
   fclose(fp);
 
   // get file with word_file name
@@ -1028,7 +1044,10 @@ void get_hint(int fd, char* plid){
 
   // get file content
   char *file = (char*)malloc(fsize + 1);
-  fread(file, fsize, 1, fp);
+  if (fread(file, fsize, 1, fp) < 1) {
+    perror("fread");
+    exit(1);
+  }
 
   fclose(fp);
 
@@ -1039,6 +1058,8 @@ void get_hint(int fd, char* plid){
   send_file(fd, file, fsize);
   send_message_tcp(fd, "\n");
   free(reply);
+  free(file);
+  free(filename);
 }
 
 void get_scoreboard(int fd){
@@ -1090,7 +1111,10 @@ void get_scoreboard(int fd){
 
   // get file content
   char *file = (char*)malloc(fsize + 1);
-  fread(file, fsize, 1, temp);
+  if (fread(file, fsize, 1, temp) < 1) {
+    perror("fread");
+    exit(1);
+  }
 
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(filename) + fsize + 2);
   sprintf(reply, "%s %s %s %ld ", RSB, OK, filename, fsize);
@@ -1134,7 +1158,10 @@ static void handler(int signum) {
   switch (signum) {
   case SIGINT:
     printf("Server shutting down...\n");
-    delete_table();
+    if (tcp == 0) {
+      delete_table();
+      freeaddrinfo(res);
+    }
     exit(0);
   default:
     printf("IGNORING_SIGNAL\n");
