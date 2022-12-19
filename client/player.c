@@ -543,7 +543,7 @@ void parse_message_play(char *message, int pos[]) {
         pos[index] = message[j] - '0';
 
       } else {
-        pos[index] = (message[j] - '0') * 10 + (message[j + 1] - '0');
+        pos[index] = (message[j] - '0') * 10 + (message[++j] - '0');
       }
       index++;
     }
