@@ -106,6 +106,8 @@ int delete_table() {
   return 0;
 }
 
+int count = 0;
+
 char port[6];
 int verbose = 0; // 0 false, 1 true
 
@@ -377,7 +379,7 @@ char* play_letter(char *message) {
         game->errors++;
 
         // 5.1: MAX ERRORS REACHED -> OVR
-        if (game->errors == game->max_errors) {
+        if (game->errors > game->max_errors) {
           strcpy(status, OVR);
           sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
           update_game_status(game_id, letter, OVR);
@@ -457,7 +459,7 @@ char* guess_word(char *message) {
       else{
         game->errors++;
 
-        if (game->errors == game->max_errors){ // GAMEOVER
+        if (game->errors > game->max_errors){ // GAMEOVER
           strcpy(status, OVR);
           update_game_status(game_id, word, OVR);
           sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
@@ -629,15 +631,23 @@ int set_game_data(game_id * game_id) {
     exit(1);
   }
 
-  // get random number
-  srand(time(0));
-  random_number = rand() % SIZE_WORDFILE; 
-  // dont forget to update wordfile size
+  // // get random number
+  // srand(time(0));
+  // random_number = rand() % SIZE_WORDFILE; 
+  // // dont forget to update wordfile size
 
-  // get word from file
-  for (i = 0; i <= random_number; i++) {
-    fscanf(fp, "%s %s", word, file);
+  // // get word from file
+  // for (i = 0; i <= random_number; i++) {
+  //   fscanf(fp, "%s %s", word, file);
+  // }
+  fseek(fp, 0, SEEK_END);
+  int size = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+
+  for (i = 0; i <= count; i++) {
+     fscanf(fp, "%s %s", word, file);
   }
+  count = (count + 1) % size;
 
   for (i = 0; i < strlen(word); i++) {
     word[i] = toupper(word[i]);
