@@ -109,10 +109,10 @@ int delete_table() {
   return 0;
 }
 
-int count = 1;
-
 char port[6];
+char wordfile[256];
 int verbose = 0; // 0 false, 1 true
+int count = 1; // keep track of next word to assign
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
@@ -121,13 +121,15 @@ int main(int argc, char *argv[]) {
 
   printf("Server started on port %s\n", port);
   if (verbose)
-    printf("%s", VERBOSE);
+    puts(VERBOSE_ON);
 
   int pid = fork();
 
   if (pid == 0) {
     // Child process
-    tcp = 1;
+    tcp = 1; // flag to ignore table deletion later
+    signal(SIGCHLD, SIG_IGN); // ignore child signals
+    
     message_tcp();
   } else if (pid > 0) {
     // Parent process
@@ -151,11 +153,18 @@ int main(int argc, char *argv[]) {
 // Parse the arguments given to the program (host and port)
 void parse_args(int argc, char *argv[]) {
   // Two arguments, -v and -p
-  strcpy(port, DEFAULT_PORT);
+  strcpy(port, DEFAULT_PORT); // TODO word file parameter
 
-  for (int i = 1; i < argc; i++) { // Parse each given option and argument
+  if (argc < 1 || (access(argv[1], F_OK) == -1) || (access(argv[1], R_OK) == -1)) {
+    puts(ERR_INVALID_WORDFILE);
+    exit(1);
+  } else {
+    strcpy(wordfile, argv[1]);
+  }
 
-    if (strcmp(argv[i], "-v") == 0) { // Host option (-n)
+  for (int i = 2; i < argc; i++) { // Parse each given option and argument
+
+    if (strcmp(argv[i], "-v") == 0) { // Verbose Option (-v)
       // SET VERBOSE
       verbose = 1;
 
@@ -168,7 +177,7 @@ void parse_args(int argc, char *argv[]) {
       }
 
     } else { // Invalid option
-      printf(ERR_INVALID_OPTION);
+      puts(ERR_INVALID_OPTION);
       exit(1);
     }
   }
@@ -228,22 +237,24 @@ void message_udp() {
     buf[n] = '\0';
 
     if (verbose == 1) {
-      printf("%s", UDP);
+      puts(UDP_RECV);
       printf("CLIENT IP: '%s';PORT: '%d'\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     }
 
     response = parse_message_udp(buf);
-    n = sendto(fd, response, strlen(response), 0, (struct sockaddr *)&addr, addrlen);
-    if (n == -1) {
-      perror("sendto");
-      exit(1);
-    }
+    if (response != NULL) { // No problems encountered, send response
+      n = sendto(fd, response, strlen(response), 0, (struct sockaddr *)&addr, addrlen);
+      if (n == -1) {
+        perror("sendto");
+        exit(1);
+      }
 
-    if (verbose == 1) {
-      printf("SENT: '%s'\n", response);
-    }
+      if (verbose == 1) {
+        printf("SENT: '%s'\n", response);
+      }
 
-    free(response);
+      free(response);
+    }
   }
   close(fd);
 
@@ -252,7 +263,7 @@ void message_udp() {
 
 char* parse_message_udp(char *message) {
   char code[4];
-  sscanf(message, "%s", code);
+  sscanf(message, "%3s", code);
 
   if (strcmp(code, SNG) == 0) {
     // start new game
@@ -274,9 +285,9 @@ char* parse_message_udp(char *message) {
   }
 
   else {
-    printf("%s", ERR_CODE);
-    return NULL;
-    // error
+    char* response = (char*) malloc(6 * sizeof(char));
+    sprintf(response, "%s\n", ERR);
+    return response;
   }
 }
 
@@ -288,7 +299,13 @@ char* start_new_game(char *message) {
   char* response;
   response = (char*) malloc(256 * sizeof(char));
 
-  sscanf(message, "%s %s", code, plid);
+  sscanf(message, "%3s %6s", code, plid);
+
+  if (strlen(plid) != 6 || is_number(plid) == 0 
+   ) { // TODO || clear_input() != 0
+    sprintf(response, "%s %s\n", SNG, ERR);
+    return response;
+  }
 
   if (verbose == 1)
     printf("Player %s requested a new game.\n", plid);
@@ -324,8 +341,14 @@ char* play_letter(char *message) {
   char* buffer;
   buffer = (char*) malloc(256 * sizeof(char));
 
-  sscanf(message, "%s %s %s %d\n", code, plid, letter, &trial);
-  // TODO letter to upper case?
+  sscanf(message, "%s %6s %1s %d\n", code, plid, letter, &trial);
+  letter[0] = toupper(letter[0]);
+  if (strlen(plid) != 6 || is_number(plid) == 0 || strlen(letter) != 1
+   || is_word(letter) == 0) { // TODO || clear_input() != 0
+    strcpy(status, ERR);
+    sprintf(buffer, "%s %s\n", RLG, status);
+    return buffer;
+  }
   
   if (verbose == 1)
     printf("Player %s requested to play letter %s.\n", plid, letter);
@@ -418,7 +441,14 @@ char* guess_word(char *message) {
   char *buffer;
   buffer = (char*) malloc(256 * sizeof(char));
 
-  sscanf(message, "%s %s %s %d", code, plid, word, &trial);
+  sscanf(message, "%s %6s %30s %d", code, plid, word, &trial);
+  // TODO do we format word later toupper?
+  if (strlen(plid) != 6 || is_number(plid) == 0 || strlen(word) < 3
+   || is_word(word) == 0) { // TODO || clear_input() != 0
+    strcpy(status, ERR);
+    sprintf(buffer, "%s %s\n", RWG, status);
+    return buffer;
+  }
 
   if (verbose == 1){
     printf("Player %s sent a guess: %s.\n", plid, word);
@@ -494,19 +524,22 @@ char* quit(char *message) {
   char* buffer;
   buffer = (char*) malloc(256 * sizeof(char));
 
-  sscanf(message, "%s %s", code, plid);
+  sscanf(message, "%s %6s", code, plid);
+
+  if (strlen(plid) != 6 || is_number(plid) == 0 
+   || get_game(plid) == NULL) { // TODO || clear_input() != 0
+    strcpy(status, ERR);
+    sprintf(buffer, "%s %s\n", RQT, status);
+    return buffer;
+  }
 
   if (verbose == 1)
     printf("Player %s requested to quit the game.\n", plid);
 
   game_id *curr_game = get_game(plid);
-  if (curr_game == NULL) { // NO ACTIVE GAMES FOUND FOR PLAYER
-    strcpy(status, ERR);
-  } 
-  else { // ACTIVE GAME FOUND
-    delete_game(curr_game); // DELETE GAME
-    strcpy(status, OK);
-  }
+  // ACTIVE GAME FOUND
+  delete_game(curr_game); // DELETE GAME
+  strcpy(status, OK);
 
   sprintf(buffer, "%s %s\n", RQT, status);
   // send message to client
@@ -541,7 +574,11 @@ void store_game(game_id *curr_game){
     exit(1);
   }
 
-  FILE* temp = fopen(TEMP, "w"); // Create temporary auxiliary file
+  flock(fileno(fp), LOCK_EX);
+
+  char temp_filename[64];
+  sprintf(temp_filename, "%d%s", getpid(), TEMP);
+  FILE* temp = fopen(temp_filename, "w"); // Create temporary auxiliary file
   if (temp == NULL) {
     perror("fopen");
     exit(1);
@@ -576,12 +613,13 @@ void store_game(game_id *curr_game){
 
   // Reset file pointers to the beginning of the files (and change modes)
   fclose(temp);
-  temp = fopen(TEMP, "r");
+  temp = fopen(temp_filename, "r");
   if (temp == NULL) {
     perror("fopen");
     exit(1);
   }
   fclose(fp);
+  
   fp = fopen(SCOREBOARD, "w");
   if (temp == NULL) {
     perror("fopen");
@@ -594,9 +632,10 @@ void store_game(game_id *curr_game){
   }
   
   fclose(fp);
+  flock(fileno(fp), LOCK_UN);
   fclose(temp);
 
-  remove(TEMP); // delete auxiliary file
+  remove(temp_filename); // delete auxiliary file
 }
 
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
@@ -631,7 +670,7 @@ int set_game_data(game_id * game_id) {
   int word_length;
   int random_number;
 
-  FILE *fp = fopen("words.txt", "r");
+  FILE *fp = fopen(wordfile, "r");
   if (fp == NULL) {
     perror("fopen");
     exit(1);
@@ -768,6 +807,8 @@ void update_game_status(game_id *game, char* attempt, char* status) {
   char filename[256];
   char st_filename[256];
 
+  check_gamesFolder();
+
   sprintf(filename, GAMES, game->plid);
   sprintf(st_filename, GAMES_STATUS, game->plid);
 
@@ -864,7 +905,7 @@ void message_tcp() {
       perror("fork");
       exit(1);
     }
-    if (pid == 0) { // Child process
+    if (pid == 0) { // Child process // TODO SUGCHILD
       puts("Connection accepted");
 
       n = read(newfd, buffer, 256); // TODO VALGRIND WARN
@@ -888,6 +929,14 @@ void parse_message_tcp(char *message, int fd){
   char plid[7];
 
   sscanf(message, "%s", code);
+
+  // TODO
+  // if (clear_input() != 0) {
+  //   char* response = (char*) malloc(6 * sizeof(char));
+  //   sprintf(response, "%s\n", ERR);
+  //   send_message_tcp(fd, response);
+  //   return;
+  // }
 
   if (strcmp(code, GSB) == 0){
     get_scoreboard(fd);
@@ -918,6 +967,8 @@ char* state(char* plid, int fd) {
   if (verbose == 1){
     printf("Player %s requested game state\n", plid);
   }
+
+  check_gamesFolder();
 
   sprintf(st_filename, GAMES_STATUS, plid);
   // Check if file exists 
@@ -1003,6 +1054,8 @@ void get_hint(int fd, char* plid){
     printf("Player %s requested hint\n", plid);
   }
 
+  check_gamesFolder();
+
   sprintf(st_filename, GAMES_STATUS, plid);
 
   FILE *fp = fopen(st_filename, "r"); // Open file with game status
@@ -1030,7 +1083,7 @@ void get_hint(int fd, char* plid){
 
   fp = fopen(filename, "r");
   if (access(filename, F_OK) == -1 || access(filename, R_OK) == -1) {
-    printf(FILE_DNE);
+    puts(FILE_DNE);
     reply = (char*)malloc(strlen(RHL) + 1 + strlen(NOK) + 2);
     sprintf(reply, "%s %s\n", RHL, NOK);
     send_message_tcp(fd, reply);
@@ -1069,15 +1122,18 @@ void get_scoreboard(int fd){
   char *reply;
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
 
-  if (verbose == 1){
-    printf("%s", SB_REQUESTED);
-  }
+  if (verbose == 1)
+    puts(SB_REQUEST);
 
   strcpy(filename, SCOREBOARD);
 
   FILE *fp = fopen(filename, "r");
   long fsize = 0;
+
   if (fp != NULL && access(filename, F_OK) == 0) {
+    // Acquire a read lock on the file
+    flock(fileno(fp), LOCK_SH);
+    
     // go to the end of the file to know the size
     fseek(fp, 0, SEEK_END);
     fsize = ftell(fp);
@@ -1095,7 +1151,9 @@ void get_scoreboard(int fd){
     return;
   }
 
-  FILE *temp = fopen(TEMP, "w+");
+  char temp_filename[64];
+  sprintf(temp_filename, "%d%s", getpid(), TEMP);
+  FILE *temp = fopen(temp_filename, "w+");
 
   int score, strials, trials, i = 1;
   char plid[7];
@@ -1108,6 +1166,8 @@ void get_scoreboard(int fd){
     fprintf(temp, "%d-  %d    %s            %d                %d          %s\n", i, score, plid, strials, trials, word);
     i++;
   }
+  // Release the lock
+  flock(fileno(fp), LOCK_UN);
 
   fsize = ftell(temp);
   fseek(temp, 0, SEEK_SET);
@@ -1131,7 +1191,7 @@ void get_scoreboard(int fd){
   free(filename);
   fclose(fp);
   fclose(temp);
-  remove(TEMP);
+  remove(temp_filename);
 }
 
 /* --------------------------------------------------------------------------------------------------------------
@@ -1160,13 +1220,69 @@ void send_file(int fd, char* file, int fsize){
 static void handler(int signum) {
   switch (signum) {
   case SIGINT:
-    printf("Server shutting down...\n");
+    puts("Server shutting down...");
     if (tcp == 0) {
       delete_table();
       freeaddrinfo(res);
     }
     exit(0);
   default:
-    printf("IGNORING_SIGNAL\n");
+    puts("IGNORING_SIGNAL");
   }
 }
+
+void check_gamesFolder(){
+  DIR *dir = opendir("GAMES");
+  if (dir) {
+    closedir(dir);
+  } else if (ENOENT == errno) {
+    mkdir("GAMES", 0700);
+  } else {
+    perror("opendir");
+    exit(1);
+  }
+}
+
+// FIX THIS, probably get message as argument and go from there
+int clear_input() {
+  int c;
+  int ret = 0;
+
+  while ((c = getchar()) != '\n') {
+    if (c != ' ' && c != '\t')
+      ret = 1;
+  }
+  return ret;
+}
+
+int is_word(char* buf) {
+  int i = 0;
+  for (i = 0; i < strlen(buf); i++) {
+    char c = buf[i];
+    // check if char is a letter
+    if ((c < 'A' || c > 'Z') &&
+     (c < 'a' || c > 'z')) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+int is_number(char* buf) {
+  int i = 0;
+  for (i = 0; i < strlen(buf); i++) {
+    char c = buf[i];
+    // check if char is a number
+    if ((c < '0' || c > '9')) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+// TODO clean up code
+// TODO Comments here and in header files
+// TODO format everything nicely with clang
+// TODO make single makefile in project root folder
+// TODO move these functions to a shared file between client and server
+// TODO rever timeouts e etc

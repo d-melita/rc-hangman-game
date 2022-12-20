@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
     }
 
     else {
-      printf(ERR_INVALID_CMD);
+      puts(ERR_INVALID_CMD);
       // Clear stdin until newline using something other than getchar
       while (getchar() != '\n');
     }
@@ -171,12 +171,12 @@ void start_function() {
   }
 
   if (game_ongoing == 1) {
-    printf(ERR_ONGOING_GAME);
+    puts(ERR_ONGOING_GAME);
     return;
   }
 
-  if (strlen(t_plid) != 6) {
-    printf(ERR_INVALID_PLID);
+  if (strlen(t_plid) != 6 || is_number(t_plid) == 0) {
+    puts(ERR_INVALID_PLID);
     return;
   }
 
@@ -191,22 +191,20 @@ void play_function() {
   int n;
   char *message;
   char trial_str[10];
+  char letter[2];
 
   sprintf(trial_str, "%d", current_game.trial);
   message = malloc(13 + strlen(trial_str) + 2);
   // 13 (PLG + plid + space) + strlen(trial_str) + 2 (\0 + \n)
 
-  n = scanf("%s", current_game.last_letter);
+  n = scanf("%1s", letter);
   if (n == EOF || n == 0) {
     exit(1); // EOF or no input
   }
-  
-  current_game.last_letter[0] = toupper(current_game.last_letter[0]);
-  sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter,
-          current_game.trial);
-  printf("%s", message);
+  letter[0] = toupper(letter[0]);
 
-  if (clear_input() == 1) {
+  if (clear_input() == 1 || strlen(letter) != 1 ||
+      is_word(letter) == 0) {
     puts(ERR_INVALID_ARGS);
     free(message);
     return;
@@ -217,6 +215,11 @@ void play_function() {
     free(message);
     return;
   }
+
+  strcpy(current_game.last_letter, letter);
+  sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter,
+          current_game.trial);
+  printf("%s", message);
 
   message_udp(message);
   free(message);
@@ -227,14 +230,15 @@ void guess_function() {
   int n;
   char *message;
   char trial_str[10];
+  char guess[31];
 
   sprintf(trial_str, "%d", current_game.trial);
 
-  n = scanf("%s", current_game.word_guessed);
+  n = scanf("%30s", guess);
   if (n == EOF || n == 0) {
     exit(1); // EOF or no input
   }
-  if (clear_input() == 1) {
+  if (clear_input() == 1 || strlen(guess) < 3 || is_word(guess) == 0) {
     puts(ERR_INVALID_ARGS);
     return;
   }
@@ -244,6 +248,7 @@ void guess_function() {
     return;
   }
 
+  strcpy(current_game.word_guessed, guess);
   for (int i = 0; i < strlen(current_game.word_guessed); i++) {
     current_game.word_guessed[i] = toupper(current_game.word_guessed[i]);
   }
@@ -790,4 +795,29 @@ int clear_input() {
       ret = 1;
   }
   return ret;
+}
+
+int is_word(char* buf) {
+  int i = 0;
+  for (i = 0; i < strlen(buf); i++) {
+    char c = buf[i];
+    // check if char is a letter
+    if ((c < 'A' || c > 'Z') &&
+     (c < 'a' || c > 'z')) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+int is_number(char* buf) {
+  int i = 0;
+  for (i = 0; i < strlen(buf); i++) {
+    char c = buf[i];
+    // check if char is a number
+    if ((c < '0' || c > '9')) {
+      return 0;
+    }
+  }
+  return 1;
 }

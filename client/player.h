@@ -194,4 +194,7 @@ static void handler(int signum);
 /// are found, 0 otherwise
 int clear_input();
 
+int is_word(char* buf);
+int is_number(char* buf);
+
 #endif
