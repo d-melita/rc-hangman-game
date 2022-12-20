@@ -68,6 +68,9 @@
 #define VERBOSE_ON "Verbose mode enabled"
 #define UDP_RECV "New UDP message received"
 #define SB_REQUEST "Scoreboard requested"
+#define CONN_ACCP "Connection accepted"
+#define SERVER_SD "Server shutting down..."
+#define IG_SIG "IGNORING_SIGNAL"
 
 // SCOREBOARD HEADER
 #define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-MY_IP=$(curl -s http://ipecho.net/plain)
+MY_IP="94.63.108.2"
 TEJO="nc tejo.tecnico.ulisboa.pt 59000"
 
 RED='\033[0;31m'
@@ -8,14 +8,14 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 function run_server() {
-  server/GS server/word_eng.txt -v > tests/tmp/server.log
+  server/GS server/word_eng.txt -p 50400 -v > tests/tmp/server.log
 }
 
 function run_command() {
     echo "Testing $1"
     FILE_NAME=$(basename $1 .txt)
     TEST=$(echo $FILE_NAME | cut -d'_' -f2)
-    COMMAND=$(echo "$MY_IP 58001 $TEST" | $TEJO > tests/tmp/report-$TEST.html)
+    COMMAND=$(echo "$MY_IP 50400 $TEST" | $TEJO > tests/tmp/report-$TEST.html)
     if [ ! -s tests/tmp/report-$TEST.html ] || grep -q "color=\"red\"" tests/tmp/report-$TEST.html; then
         echo -e "${RED}Test failed${NC}"
     else

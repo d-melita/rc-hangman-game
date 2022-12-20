@@ -225,8 +225,6 @@ void message_udp() {
   }
 
   while (1) {
-    printf("---DEBUG: %d---\n", ++num);
-
     addrlen = sizeof(addr);
     n = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&addr, &addrlen);
     if (n == -1) {
@@ -323,7 +321,8 @@ char* start_new_game(char *message) {
     sprintf(response, "%s %s %d %d\n", RSG, status, word_length, MAX_ERRORS);
 
     update_game_status(curr_game, NULL, ACT);
-    printf("New game started for %s with word: '%s'\n", plid, curr_game->game_data->word);
+    if (verbose == 1)
+      printf("New game started for %s with word: '%s'\n", plid, curr_game->game_data->word);
   } else { // PLAYER HAS AN ONGOING GAME
     strcpy(status, NOK);
     sprintf(response, "%s %s\n", RSG, status);
@@ -906,7 +905,7 @@ void message_tcp() {
       exit(1);
     }
     if (pid == 0) { // Child process // TODO SUGCHILD
-      puts("Connection accepted");
+      puts(CONN_ACCP);
 
       n = read(newfd, buffer, 256); // TODO VALGRIND WARN
       if (n == -1) {
@@ -1220,14 +1219,14 @@ void send_file(int fd, char* file, int fsize){
 static void handler(int signum) {
   switch (signum) {
   case SIGINT:
-    puts("Server shutting down...");
+    puts(SERVER_SD);
     if (tcp == 0) {
       delete_table();
       freeaddrinfo(res);
     }
     exit(0);
   default:
-    puts("IGNORING_SIGNAL");
+    puts(IG_SIG);
   }
 }
 
