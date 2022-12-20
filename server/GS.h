@@ -17,6 +17,8 @@
 #include <dirent.h>
 #include <time.h>
 #include <ctype.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 
 // DEFINES
 
@@ -63,9 +65,9 @@
 // MESSAGES
 #define LETTER_TRIAL "Letter trial: "
 #define WORD_GUESS "Word guess: "
-#define VERBOSE "Verbose mode enabled\n"
-#define UDP "New UDP message received\n"
-#define SB_REQUESTED "Scoreboard requested\n"
+#define VERBOSE_ON "Verbose mode enabled"
+#define UDP_RECV "New UDP message received"
+#define SB_REQUEST "Scoreboard requested"
 
 // SCOREBOARD HEADER
 #define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"
@@ -93,8 +95,9 @@
 // ERRORS
 
 #define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
-#define ERR_INVALID_OPTION "ERROR: Invalid option\n"
-#define FILE_DNE "ERROR: File does not exist\n"
+#define ERR_INVALID_OPTION "ERROR: Invalid option"
+#define ERR_INVALID_WORDFILE "ERROR: Word's file is invalid, check permissions or if file exists"
+#define FILE_DNE "ERROR: File does not exist"
 
 // SCOREBOARD HEADER
 #define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"
@@ -146,6 +149,11 @@ void send_message_tcp(int fd, char* message);
 void send_file(int fd, char* file, int fsize);
 
 int delete_table();
+
+void check_gamesFolder();
+int is_word(char* buf);
+int is_number(char* buf);
+int clear_input();
 
 static void handler(int signum);
 
