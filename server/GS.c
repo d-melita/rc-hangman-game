@@ -109,7 +109,7 @@ int delete_table() {
   return 0;
 }
 
-int count = 0;
+int count = 1;
 
 char port[6];
 int verbose = 0; // 0 false, 1 true
@@ -647,17 +647,20 @@ int set_game_data(game_id * game_id) {
   //   fscanf(fp, "%s %s", word, file);
   // }
 
-  for (i = 0; i <= count; i++) {
-    if (fscanf(fp, "%s %s", word, file) == EOF) {
-      fseek(fp, 0, SEEK_SET); // go to the beginning of the file
-      count = 0;
-      if (fscanf(fp, "%s %s", word, file) == EOF) {
-        perror("fscanf");
-        exit(1); // thats not supposed to happen
-      }
-    }
-    count++;
+  // Get number of lines in file
+  int size = 0;
+  while (fscanf(fp, "%s %s", word, file) != EOF) {
+    size++;
   }
+  fseek(fp, 0, SEEK_SET);
+
+
+  for (i = 1; i <= count; i++) {
+    fscanf(fp, "%s %s", word, file);
+  }
+  count++;
+  if (count > size)
+    count = 1;
 
   for (i = 0; i < strlen(word); i++) {
     word[i] = toupper(word[i]);
