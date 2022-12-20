@@ -67,6 +67,7 @@
 #define WORD_GUESS "Word guess: "
 #define VERBOSE_ON "Verbose mode enabled"
 #define UDP_RECV "New UDP message received"
+#define TCP_RECV "New TCP message received"
 #define SB_REQUEST "Scoreboard requested"
 #define CONN_ACCP "Connection accepted"
 #define SERVER_SD "Server shutting down..."
@@ -84,6 +85,7 @@
 
 // DIRS
 #define WORDS "WORDS/"
+#define GAMES_DIR "GAMES"
 
 // STATUS MESSAGES
 #define LAST_FIN_GAME "Last finalized game for player %s\n"
@@ -100,7 +102,22 @@
 #define ERR_MISSING_ARGUMENT "ERROR: '%s' option requires an argument\n"
 #define ERR_INVALID_OPTION "ERROR: Invalid option"
 #define ERR_INVALID_WORDFILE "ERROR: Word's file is invalid, check permissions or if file exists"
-#define FILE_DNE "ERROR: File does not exist"
+#define ERR_FILE_DNE "ERROR: File does not exist"
+#define ERR_MALLOC "ERROR: Malloc failed"
+#define ERR_FORK "ERROR: Fork failed"
+#define ERR_SOCKET "ERROR: Socket failed"
+#define ERR_BIND "ERROR: Bind failed"
+#define ERR_RECVFROM "ERROR: Recvfrom failed"
+#define ERR_SENDTO "ERROR: Sendto failed"
+#define ERR_GETADDRINFO "ERROR: Getaddrinfo failed"
+#define ERR_LISTEN "ERROR: Listen failed"
+#define ERR_ACCEPT "ERROR: Accept failed"
+#define ERR_READ "ERROR: Read failed"
+#define ERR_WRITE "ERROR: Write failed"
+#define ERR_FOPEN "ERROR: Open failed"
+#define ERR_FSCANF "ERROR: Fscanf failed"
+#define ERR_FREAD "ERROR: Fread failed"
+#define ERR_OPENDIR "ERROR: Opendir failed"
 
 // SCOREBOARD HEADER
 #define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"
@@ -156,7 +173,7 @@ int delete_table();
 void check_gamesFolder();
 int is_word(char* buf);
 int is_number(char* buf);
-int clear_input();
+int clear_input(char* message);
 
 static void handler(int signum);
 

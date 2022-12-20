@@ -34,6 +34,47 @@ game_id** games; // array of game_id pointers
 int tcp = 0;
 struct addrinfo hints, *res;
 
+char port[6];
+char wordfile[256];
+int verbose = 0; // 0 false, 1 true
+int count = 1; // keep track of next word to assign
+
+int main(int argc, char *argv[]) {
+  parse_args(argc, argv);
+
+  signal(SIGINT, handler);
+
+  printf("Server started on port %s\n", port);
+  if (verbose)
+    puts(VERBOSE_ON);
+
+  int pid = fork();
+
+  if (pid == 0) {
+    // Child process
+    tcp = 1; // flag to ignore table deletion later
+    signal(SIGCHLD, SIG_IGN); // ignore child signals
+    
+    message_tcp();
+  } else if (pid > 0) {
+    // Parent process
+    games = malloc(sizeof(game_id*) * DEFAULT_TABLE_SIZE);
+    if (games == NULL) {
+      perror(ERR_MALLOC);
+      exit(1);
+    }
+    memset(games, 0, sizeof(game_id*) * DEFAULT_TABLE_SIZE);
+
+    message_udp();
+  } else {
+    // Error
+    perror(ERR_FORK);
+    exit(1);
+  }
+
+  return 0;
+}
+
 // Functions related to table
 
 int hash(char* plid) {
@@ -47,7 +88,6 @@ int set_game(char* plid) {
   game_id* prev = NULL;
 
   if (curr == NULL) {
-    printf("Creating new game for player %s\n", plid);
     curr = (game_id*) malloc(sizeof(game_id));
     strcpy(curr->plid, plid);
     curr->prev = games[hash_value];
@@ -69,7 +109,7 @@ int set_game(char* plid) {
 int resize_table() { // TODO TEST IF WORKS
   game_id** new_table = malloc(sizeof(game_id*) * table_size * 2);
   if (new_table == NULL) {
-    perror("malloc");
+    perror(ERR_MALLOC);
     return 1;
   }
   memset(new_table, 0, sizeof(game_id*) * table_size * 2); 
@@ -106,47 +146,6 @@ int delete_table() {
     }
   }
   free(games);
-  return 0;
-}
-
-char port[6];
-char wordfile[256];
-int verbose = 0; // 0 false, 1 true
-int count = 1; // keep track of next word to assign
-
-int main(int argc, char *argv[]) {
-  parse_args(argc, argv);
-
-  signal(SIGINT, handler);
-
-  printf("Server started on port %s\n", port);
-  if (verbose)
-    puts(VERBOSE_ON);
-
-  int pid = fork();
-
-  if (pid == 0) {
-    // Child process
-    tcp = 1; // flag to ignore table deletion later
-    signal(SIGCHLD, SIG_IGN); // ignore child signals
-    
-    message_tcp();
-  } else if (pid > 0) {
-    // Parent process
-    games = malloc(sizeof(game_id*) * DEFAULT_TABLE_SIZE);
-    if (games == NULL) {
-      perror("malloc");
-      exit(1);
-    }
-    memset(games, 0, sizeof(game_id*) * DEFAULT_TABLE_SIZE);
-
-    message_udp();
-  } else {
-    // Error
-    perror("fork");
-    exit(1);
-  }
-
   return 0;
 }
 
@@ -203,7 +202,7 @@ void message_udp() {
 
   fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
   if (fd == -1) {
-    perror("socket");
+    perror(ERR_SOCKET);
     exit(1);
   }
 
@@ -220,7 +219,7 @@ void message_udp() {
 
   n = bind(fd, res->ai_addr, res->ai_addrlen);
   if (n == -1) {
-    perror("bind");
+    perror(ERR_BIND);
     exit(1);
   }
 
@@ -228,7 +227,7 @@ void message_udp() {
     addrlen = sizeof(addr);
     n = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&addr, &addrlen);
     if (n == -1) {
-      perror("recvfrom");
+      perror(ERR_RECVFROM);
       exit(1);
     }
 
@@ -236,19 +235,19 @@ void message_udp() {
 
     if (verbose == 1) {
       puts(UDP_RECV);
-      printf("CLIENT IP: '%s';PORT: '%d'\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+      printf("CLIENT IP: %s | PORT: %d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
     }
 
     response = parse_message_udp(buf);
     if (response != NULL) { // No problems encountered, send response
       n = sendto(fd, response, strlen(response), 0, (struct sockaddr *)&addr, addrlen);
       if (n == -1) {
-        perror("sendto");
+        perror(ERR_SENDTO);
         exit(1);
       }
-
+      
       if (verbose == 1) {
-        printf("SENT: '%s'\n", response);
+        printf("--------------------\n"); // just to separate the messages
       }
 
       free(response);
@@ -259,6 +258,7 @@ void message_udp() {
   freeaddrinfo(res);
 }
 
+// function to parse the message received from the client
 char* parse_message_udp(char *message) {
   char code[4];
   sscanf(message, "%3s", code);
@@ -299,14 +299,13 @@ char* start_new_game(char *message) {
 
   sscanf(message, "%3s %6s", code, plid);
 
-  if (strlen(plid) != 6 || is_number(plid) == 0 
-   ) { // TODO || clear_input() != 0
+  if (strlen(plid) != 6 || is_number(plid) == 0 || clear_input(message) != 0) {
     sprintf(response, "%s %s\n", SNG, ERR);
     return response;
   }
 
   if (verbose == 1)
-    printf("Player %s requested a new game.\n", plid);
+    printf("[%s] Player %s requested a new game.\n", code, plid);
 
   game_id *curr_game = get_game(plid);  
   if (curr_game == NULL || curr_game->game_data == NULL) { // PLAYER HAS NO ONGOING GAME
@@ -343,14 +342,14 @@ char* play_letter(char *message) {
   sscanf(message, "%s %6s %1s %d\n", code, plid, letter, &trial);
   letter[0] = toupper(letter[0]);
   if (strlen(plid) != 6 || is_number(plid) == 0 || strlen(letter) != 1
-   || is_word(letter) == 0) { // TODO || clear_input() != 0
+   || is_word(letter) == 0 || clear_input(message) != 0) {
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RLG, status);
     return buffer;
   }
   
   if (verbose == 1)
-    printf("Player %s requested to play letter %s.\n", plid, letter);
+    printf("[%s] Player %s requested to play letter %s.\n", code, plid, letter);
 
   game_id *game_id = get_game(plid);
   if (game_id != NULL && game_id->game_data != NULL) {          // 1: THERES AN ACTIVE GAME FOR PLAYER
@@ -443,14 +442,14 @@ char* guess_word(char *message) {
   sscanf(message, "%s %6s %30s %d", code, plid, word, &trial);
   // TODO do we format word later toupper?
   if (strlen(plid) != 6 || is_number(plid) == 0 || strlen(word) < 3
-   || is_word(word) == 0) { // TODO || clear_input() != 0
+   || is_word(word) == 0 || clear_input(message) != 0) {
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RWG, status);
     return buffer;
   }
 
   if (verbose == 1){
-    printf("Player %s sent a guess: %s.\n", plid, word);
+    printf("[%s] Player %s sent a guess: %s.\n", code, plid, word);
   }
 
   game_id *game_id = get_game(plid);
@@ -526,14 +525,14 @@ char* quit(char *message) {
   sscanf(message, "%s %6s", code, plid);
 
   if (strlen(plid) != 6 || is_number(plid) == 0 
-   || get_game(plid) == NULL) { // TODO || clear_input() != 0
+   || get_game(plid) == NULL || clear_input(message) != 0) { // TODO || 
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RQT, status);
     return buffer;
   }
 
   if (verbose == 1)
-    printf("Player %s requested to quit the game.\n", plid);
+    printf("[%s] Player %s requested to quit the game.\n", code, plid);
 
   game_id *curr_game = get_game(plid);
   // ACTIVE GAME FOUND
@@ -862,7 +861,7 @@ void message_tcp() {
 
   fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
   if (fd == -1) {
-    perror("socket");
+    perror(ERR_SOCKET);
     exit(1);
   }
 
@@ -875,18 +874,18 @@ void message_tcp() {
 
   errcode = getaddrinfo(NULL, port, &hints, &res);
   if (errcode != 0) {
-    perror("getaddrinfo");
+    perror(ERR_GETADDRINFO);
     exit(1);
   }
 
   n = bind(fd, res->ai_addr, res->ai_addrlen);
   if (n == -1) {
-    perror("bind");
+    perror(ERR_BIND);
     exit(1);
   }
 
   if (listen(fd, 5) == -1) {
-    perror("listen");
+    perror(ERR_LISTEN);
     exit(1);
   }
 
@@ -894,26 +893,35 @@ void message_tcp() {
     addrlen = sizeof(addr);
 
     if ((newfd = accept(fd, (struct sockaddr *)&addr, &addrlen)) == -1) {
-      perror("accept");
+      perror(ERR_ACCEPT);
       exit(1);
     }
     setsockopt(newfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
     pid_t pid = fork();
     if (pid == -1) {
-      perror("fork");
+      perror(ERR_FORK);
       exit(1);
     }
-    if (pid == 0) { // Child process // TODO SUGCHILD
+    if (pid == 0) { // Child process // TODO SIGCHILD
       puts(CONN_ACCP);
 
       n = read(newfd, buffer, 256); // TODO VALGRIND WARN
       if (n == -1) {
-        perror("read");
+        perror(ERR_READ);
         exit(1);
       }
+
+      if (verbose == 1) {
+        puts(TCP_RECV);
+        printf("CLIENT IP: %s | PORT: %d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+      }
+
       parse_message_tcp(buffer, newfd);
 
+      if (verbose == 1) {
+        printf("--------------------\n"); // just to separate the messages
+      }
       close(newfd);
       exit(0);
     }
@@ -929,26 +937,46 @@ void parse_message_tcp(char *message, int fd){
 
   sscanf(message, "%s", code);
 
-  // TODO
-  // if (clear_input() != 0) {
-  //   char* response = (char*) malloc(6 * sizeof(char));
-  //   sprintf(response, "%s\n", ERR);
-  //   send_message_tcp(fd, response);
-  //   return;
-  // }
-
   if (strcmp(code, GSB) == 0){
+    if (clear_input(message) != 0){
+      char* response = (char*) malloc(9 * sizeof(char));
+      sprintf(response, "%s %s\n", code, ERR);
+      send_message_tcp(fd, response);
+      free(response);
+      return;
+    }
     get_scoreboard(fd);
   }
 
   else if(strcmp(code, GHL) == 0){
+    if (clear_input(message) != 0){
+      char* response = (char*) malloc(9 * sizeof(char));
+      sprintf(response, "%s %s\n", code, ERR);
+      send_message_tcp(fd, response);
+      free(response);
+      return;
+    }
     sscanf(message, "%s %s", code, plid);
     get_hint(fd, plid);
   }
 
   else if(strcmp(code, STA) == 0){
+    if (clear_input(message) != 0){
+      char* response = (char*) malloc(9 * sizeof(char));
+      sprintf(response, "%s %s\n", code, ERR);
+      send_message_tcp(fd, response);
+      free(response);
+      return;
+    }
     sscanf(message, "%s %s", code, plid);
     state(plid, fd);
+  }
+
+  else{
+    char* response = (char*) malloc(6 * sizeof(char));
+    sprintf(response, "%s\n", ERR);
+    send_message_tcp(fd, response);
+    free(response);
   }
 }
 
@@ -977,7 +1005,7 @@ char* state(char* plid, int fd) {
   }
   FILE *fp = fopen(st_filename, "r"); // Open file with game status
   if (fp == NULL) {
-    perror("fopen");
+    perror(ERR_FOPEN);
     exit(1);
   }
 
@@ -986,7 +1014,7 @@ char* state(char* plid, int fd) {
   char word_file[64];
   char word_status[31];
   if (fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status) == EOF) {
-    perror("fscanf");
+    perror(ERR_FSCANF);
     exit(1);
   }
   fclose(fp);
@@ -997,7 +1025,7 @@ char* state(char* plid, int fd) {
   sprintf(filename, GAMES, plid);
   fp = fopen(filename, "r"); // Open file with plays
   if (fp == NULL) {
-    perror("fopen");
+    perror(ERR_FOPEN);
     exit(1);
   } 
 
@@ -1059,7 +1087,7 @@ void get_hint(int fd, char* plid){
 
   FILE *fp = fopen(st_filename, "r"); // Open file with game status
   if (fp == NULL) {
-    perror("fopen");
+    perror(ERR_FOPEN);
     exit(1);
   }
 
@@ -1068,7 +1096,7 @@ void get_hint(int fd, char* plid){
   char word_file[64];
   char word_status[31];
   if (fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status) == EOF) {
-    perror("fscanf");
+    perror(ERR_FSCANF);
     exit(1);
   }
   fclose(fp);
@@ -1078,11 +1106,9 @@ void get_hint(int fd, char* plid){
   char *filename = (char*) malloc(strlen(WORDS) + strlen(word_file) + 1);
   sprintf(filename, "%s%s", WORDS, word_file);
 
-  printf("File name: %s\n", filename);
-
   fp = fopen(filename, "r");
   if (access(filename, F_OK) == -1 || access(filename, R_OK) == -1) {
-    puts(FILE_DNE);
+    puts(ERR_FILE_DNE);
     reply = (char*)malloc(strlen(RHL) + 1 + strlen(NOK) + 2);
     sprintf(reply, "%s %s\n", RHL, NOK);
     send_message_tcp(fd, reply);
@@ -1100,7 +1126,7 @@ void get_hint(int fd, char* plid){
   // get file content
   char *file = (char*)malloc(fsize + 1);
   if (fread(file, fsize, 1, fp) < 1) {
-    perror("fread");
+    perror(ERR_FREAD);
     exit(1);
   }
 
@@ -1174,7 +1200,7 @@ void get_scoreboard(int fd){
   // get file content
   char *file = (char*)malloc(fsize + 1);
   if (fread(file, fsize, 1, temp) < 1) {
-    perror("fread");
+    perror(ERR_FREAD);
     exit(1);
   }
 
@@ -1231,27 +1257,75 @@ static void handler(int signum) {
 }
 
 void check_gamesFolder(){
-  DIR *dir = opendir("GAMES");
+  DIR *dir = opendir(GAMES_DIR);
   if (dir) {
     closedir(dir);
   } else if (ENOENT == errno) {
-    mkdir("GAMES", 0700);
+    mkdir(GAMES_DIR, 0700);
   } else {
-    perror("opendir");
+    perror(ERR_OPENDIR);
     exit(1);
   }
 }
 
 // FIX THIS, probably get message as argument and go from there
-int clear_input() {
-  int c;
-  int ret = 0;
+int clear_input(char *message) {
+  // 0 = clear input
+  // 1 = error
+  int i = 0;
+  char code[4];
+  char plid[7];
+  int trial;
 
-  while ((c = getchar()) != '\n') {
-    if (c != ' ' && c != '\t')
-      ret = 1;
+  // messages like "CODE PLID\n"
+  while (message[i] != ' ') {
+    code[i] = message[i];
+    i++;
   }
-  return ret;
+  code[i] = '\0';
+  i++;
+  while (message[i] != ' ' || message[i] != '\n') {
+    plid[i] = message[i];
+    i++;
+  }
+  plid[i] = '\0';
+  i++;
+
+  // messages like "CODE PLID x TRIAL\n"
+  if (strcmp(code, PLG) == 0 || strcmp(code, PWG) == 0){
+    if (strcmp(code, PLG) == 0){
+      char letter = message[i++];
+      i++;
+    }
+
+    else{
+      char word[31];
+      int j = 0;
+      while (message[i] != ' ') {
+        word[j] = message[i];
+        i++;
+        j++;
+      }
+      word[j] = '\0';
+      i+2;
+    }
+    trial = atoi(&message[i]);
+    i++;
+  }
+
+  if (message[i] != '\n' && message[++i] != '\0') {
+    return 1;
+  }
+  return 0;
+
+  //int c;
+  //int ret = 0;
+//
+  //while ((c = getchar()) != '\n') {
+  //  if (c != ' ' && c != '\t')
+  //    ret = 1;
+  //}
+  //return ret;
 }
 
 int is_word(char* buf) {
