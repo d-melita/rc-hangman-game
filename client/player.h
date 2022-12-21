@@ -132,6 +132,7 @@
 #define ERR_SCANF "ERROR: scanf error, EOF reached or empty string read.\n"
 #define ERR_SELECT_SOCKET "Error in select_socket function, unknown value for readWrite argument\n"
 #define ERR_SELECT_RETURNED "ERROR: select returned %d\n"
+#define ERR_INPUT "ERROR: Failed to read input from sdtin"
 
 // SIGNAL MESSAGES
 #define CLOSING_SIGNAL "\nClosing Signal Received...\n"
@@ -180,7 +181,7 @@ int read_buffer2string(int fd, char *string);
 /// \param response response message (with file)
 ///
 /// \returns void
-void get_file(int fd);
+void get_file(int fd, int toPrint);
 
 /// Set a given signal to be handled by handler function.
 ///
@@ -196,5 +197,6 @@ int clear_input();
 
 int is_word(char* buf);
 int is_number(char* buf);
+int read_input(char* buffer, int size);
 
 #endif

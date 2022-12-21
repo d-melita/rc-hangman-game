@@ -27,6 +27,7 @@ typedef struct guessed_word {
   struct guessed_word *prev;
 } guessed_word;
 
+
 int table_size = DEFAULT_TABLE_SIZE;
 int num_games = 0;
 game_id** games; // array of game_id pointers
@@ -38,6 +39,7 @@ char port[6];
 char wordfile[256];
 int verbose = 0; // 0 false, 1 true
 int count = 1; // keep track of next word to assign
+
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
@@ -1342,6 +1344,17 @@ int is_number(char* buf) {
     // check if char is a number
     if ((c < '0' || c > '9')) {
       return 0;
+    }
+  }
+  return 1;
+}
+
+int check_filename(char* filename) {
+  char buffer[25] = "";
+  int ext = 0;
+  for (int i=0; i<strlen(filename); i++) {
+    for (int n=0; buffer[n] != '\0'; n++) {
+      continue;
     }
   }
   return 1;
