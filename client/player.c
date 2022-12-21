@@ -20,7 +20,6 @@ struct current_game current_game;
 int main(int argc, char *argv[]) {
   signal(SIGPIPE, handler); // Ignore SIGPIPE (broken pipe)
   signal(SIGINT, handler);
-  
 
   int n;
   char command[20];
@@ -253,7 +252,7 @@ void guess_function() {
     current_game.word_guessed[i] = toupper(current_game.word_guessed[i]);
   }
 
-  message = malloc(12 + strlen(current_game.word_guessed) + strlen(trial_str));
+  message = malloc(13 + strlen(current_game.word_guessed) + strlen(trial_str) + 2);
 
   sprintf(message, "%s %s %s %d\n", PWG, plid, current_game.word_guessed,
           current_game.trial);
@@ -314,10 +313,12 @@ void quit_function() {
     return;
   }
 
-  if (game_ongoing == 0) {
-    printf(ERR_NO_GAME);
-    return;
-  }
+  // This would make it impossible to quit games not started
+  // on the current instance.
+  // if (game_ongoing == 0) {
+  //   printf(ERR_NO_GAME);
+  //   return;
+  // }
 
   sprintf(message, "%s %s\n", QUT, plid);
   message_udp(message);
@@ -385,7 +386,7 @@ void message_udp(char *buffer) {
     return;
   }
 
-  response[n] = '\0';
+  response[n] = 0;
   parse_response_udp(response);
 
   freeaddrinfo(res);
@@ -496,10 +497,10 @@ void parse_response_udp(char *message) {
     */
   } else if (strcmp(code, ERR) == 0) {
 
-    printf(ERR_PROTOCOL);
+    puts(ERR_PROTOCOL);
   } else {
 
-    printf(ERR_UNKNOWN_CODE);
+    puts(ERR_UNKNOWN_CODE);
   }
 }
 
@@ -769,7 +770,7 @@ void parse_response_tcp(int fd) {
   }
 
   else {
-    printf(ERR_UNKNOWN_CODE);
+    puts(ERR_UNKNOWN_CODE);
   }
 }
 
