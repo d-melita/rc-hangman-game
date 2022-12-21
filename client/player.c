@@ -213,7 +213,6 @@ void play_function() {
   strcpy(current_game.last_letter, letter);
   sprintf(message, "%s %s %s %d\n", PLG, plid, current_game.last_letter,
           current_game.trial);
-  printf("%s", message);
 
   message_udp(message);
   free(message);
@@ -348,7 +347,7 @@ void message_udp(char *buffer) {
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_DGRAM;
 
-  printf("IP: %s, Port: %s\n", ip, port);
+  // printf("IP: %s, Port: %s\n", ip, port);
   errcode = getaddrinfo(ip, port, &hints, &res);
   if (errcode != 0) {
     fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
@@ -393,8 +392,6 @@ void parse_response_udp(char *message) {
   char code[4];
   char status[4];
   char *word;
-
-  printf("%s", message);
 
   // scan the message and get the code and status
   sscanf(message, "%s %s", code, status);
@@ -662,14 +659,14 @@ void get_file(int fd, int toPrint) {
   fclose(fp);
 
   printf(FILE_RECEIVED, filename, filesize);
-  puts("----------vFILEv-----------");
   if (toPrint == 1) {
     char buffer[256];
     fp = fopen(filename, "r");
+    puts("----------vFILEv-----------");
     while (fgets(buffer, 256, fp) != NULL)
       puts(buffer);
+    puts("----------^FILE^-----------");
   }
-  puts("----------^FILE^-----------");
   free(response);
 }
 

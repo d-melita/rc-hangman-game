@@ -1168,6 +1168,9 @@ void get_scoreboard(int fd){
   } // TODO : if R_OK is false, send NOK??
 
   if (fsize == 0) { // if file is empty or doesn't exist
+    if (verbose == 1) {
+        puts("--------------------"); // just to separate the messages
+    } // for some reason it wasn't printing where it should so we bruteforced it here
     reply = (char*)malloc(strlen(RSB) + strlen(EMPTY) + 3);
     sprintf(reply, "%s %s\n", RSB, EMPTY);
     send_message_tcp(fd, reply);
