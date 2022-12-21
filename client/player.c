@@ -26,10 +26,8 @@ int main(int argc, char *argv[]) {
 
   parse_args(argc, argv);
 
-  n = scanf("%s", command);
-  if (n == EOF || n == 0) {
-    exit(1); // EOF or no input
-  }
+  if (read_input(command, 20) != 0)
+    exit(1);
 
   while (strcmp(command, EXIT) != 0) {
 
@@ -68,10 +66,8 @@ int main(int argc, char *argv[]) {
       while (getchar() != '\n');
     }
 
-    n = scanf("%s", command);
-    if (n == EOF || n == 0) {
-      exit(1); // EOF or no input
-    }
+    if (read_input(command, 20) != 0)
+      exit(1);
   }
 
   if (game_ongoing == 1) {
@@ -158,10 +154,9 @@ void start_function() {
 
   char message[12];
 
-  n = scanf("%6s", t_plid);
-  if (n == EOF || n == 0) {
-    perror(ERR_SCANF);
-    exit(1); // EOF or no input
+  if (read_input(t_plid, 7) != 0) {
+    puts(ERR_INPUT);
+    exit(1);
   }
 
   if (clear_input() == 1) {
@@ -196,9 +191,9 @@ void play_function() {
   message = malloc(13 + strlen(trial_str) + 2);
   // 13 (PLG + plid + space) + strlen(trial_str) + 2 (\0 + \n)
 
-  n = scanf("%1s", letter);
-  if (n == EOF || n == 0) {
-    exit(1); // EOF or no input
+  if (read_input(letter, 2) != 0) {
+    puts(ERR_INPUT);
+    exit(1);
   }
   letter[0] = toupper(letter[0]);
 
@@ -233,9 +228,9 @@ void guess_function() {
 
   sprintf(trial_str, "%d", current_game.trial);
 
-  n = scanf("%30s", guess);
-  if (n == EOF || n == 0) {
-    exit(1); // EOF or no input
+  if (read_input(guess, 31) != 0) {
+    puts(ERR_INPUT);
+    exit(1);
   }
   if (clear_input() == 1 || strlen(guess) < 3 || is_word(guess) == 0) {
     puts(ERR_INVALID_ARGS);
@@ -621,7 +616,7 @@ int read_buffer2string(int fd, char *string) {
   return bytes;
 }
 
-void get_file(int fd) {
+void get_file(int fd, int toPrint) {
   int n, errcode;
   char filename[128];
   char filesize_str[128];
@@ -667,6 +662,14 @@ void get_file(int fd) {
   fclose(fp);
 
   printf(FILE_RECEIVED, filename, filesize);
+  puts("----------vFILEv-----------");
+  if (toPrint == 1) {
+    char buffer[256];
+    fp = fopen(filename, "r");
+    while (fgets(buffer, 256, fp) != NULL)
+      puts(buffer);
+  }
+  puts("----------^FILE^-----------");
   free(response);
 }
 
@@ -737,7 +740,7 @@ void parse_response_tcp(int fd) {
 
   if (strcmp(code, RSB) == 0) { // SCOREBOARD
     if (strcmp(status, OK) == 0) {
-      get_file(fd);
+      get_file(fd, 1);
     }
 
     else if (strcmp(status, EMPTY) == 0) {
@@ -747,7 +750,7 @@ void parse_response_tcp(int fd) {
 
   else if (strcmp(code, RHL) == 0) { // HINT
     if (strcmp(status, OK) == 0) {
-      get_file(fd);
+      get_file(fd, 0);
     }
 
     else if ((strcmp, NOK) == 0) {
@@ -757,7 +760,7 @@ void parse_response_tcp(int fd) {
 
   else if (strcmp(code, RST) == 0) { // STATE
     if (strcmp(status, ACT) == 0 || strcmp(status, FIN) == 0) {
-      get_file(fd); // active or last game finished
+      get_file(fd, 1); // active or last game finished
     }
 
     else if (strcmp(status, NOK) == 0) {
@@ -792,7 +795,7 @@ int clear_input() {
   int ret = 0;
 
   while ((c = getchar()) != '\n') {
-    if (c != ' ' && c != '\t')
+    // if (c != ' ' && c != '\t') // No spaces at all!!
       ret = 1;
   }
   return ret;
@@ -821,4 +824,20 @@ int is_number(char* buf) {
     }
   }
   return 1;
+}
+
+int read_input(char* buffer, int size) {
+  int i = 0;
+  char c;
+
+  while (i < size-1 && (c=getchar()) != ' ' 
+   && c != '\n' && c != '\t') {
+    if (c == EOF)
+     return 1;
+    buffer[i++] = c;
+  }
+  buffer[i] = '\0';
+  if (c == '\n')
+    ungetc(c, stdin);
+  return 0;
 }
