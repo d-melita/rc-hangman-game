@@ -70,8 +70,8 @@
 #define TCP_RECV "New TCP message received"
 #define SB_REQUEST "Scoreboard requested"
 #define CONN_ACCP "Connection accepted"
-#define SERVER_SD "Server shutting down..."
-#define IG_SIG "IGNORING_SIGNAL"
+#define SERVER_SD "\nServer shutting down..."
+#define IG_SIG "\nIGNORING_SIGNAL"
 
 // SCOREBOARD HEADER
 #define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"

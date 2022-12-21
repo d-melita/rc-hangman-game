@@ -41,8 +41,9 @@ int count = 1; // keep track of next word to assign
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
-
+  signal(SIGPIPE, handler);
   signal(SIGINT, handler);
+  signal(SIGCHLD, SIG_IGN); // ignore child signals
 
   printf("Server started on port %s\n", port);
   if (verbose)
@@ -53,7 +54,6 @@ int main(int argc, char *argv[]) {
   if (pid == 0) {
     // Child process
     tcp = 1; // flag to ignore table deletion later
-    signal(SIGCHLD, SIG_IGN); // ignore child signals
     
     message_tcp();
   } else if (pid > 0) {
@@ -247,7 +247,7 @@ void message_udp() {
       }
       
       if (verbose == 1) {
-        printf("--------------------\n"); // just to separate the messages
+        puts("--------------------"); // just to separate the messages
       }
 
       free(response);
@@ -299,7 +299,7 @@ char* start_new_game(char *message) {
 
   sscanf(message, "%3s %6s", code, plid);
 
-  if (strlen(plid) != 6 || is_number(plid) == 0 || clear_input(message) != 0) {
+  if (clear_input(message) != 0) {
     sprintf(response, "%s %s\n", SNG, ERR);
     return response;
   }
@@ -341,8 +341,7 @@ char* play_letter(char *message) {
 
   sscanf(message, "%s %6s %1s %d\n", code, plid, letter, &trial);
   letter[0] = toupper(letter[0]);
-  if (strlen(plid) != 6 || is_number(plid) == 0 || strlen(letter) != 1
-   || is_word(letter) == 0 || clear_input(message) != 0) {
+  if (clear_input(message) != 0) {
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RLG, status);
     return buffer;
@@ -441,8 +440,7 @@ char* guess_word(char *message) {
 
   sscanf(message, "%s %6s %30s %d", code, plid, word, &trial);
   // TODO do we format word later toupper?
-  if (strlen(plid) != 6 || is_number(plid) == 0 || strlen(word) < 3
-   || is_word(word) == 0 || clear_input(message) != 0) {
+  if (clear_input(message) != 0) {
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RWG, status);
     return buffer;
@@ -524,8 +522,7 @@ char* quit(char *message) {
 
   sscanf(message, "%s %6s", code, plid);
 
-  if (strlen(plid) != 6 || is_number(plid) == 0 
-   || get_game(plid) == NULL || clear_input(message) != 0) { // TODO || 
+  if (get_game(plid) == NULL || clear_input(message) != 0) { // TODO || 
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RQT, status);
     return buffer;
@@ -565,7 +562,7 @@ void store_game(game_id *curr_game){
   if (access(SCOREBOARD, F_OK) == -1) {
     fp = fopen(SCOREBOARD, "w+"); // Create SB file if it doesn't exist
   } else
-    fp = fopen(SCOREBOARD, "r"); 
+    fp = fopen(SCOREBOARD, "r"); // Read existing scoreboard
 
   if (fp == NULL) {
     perror("fopen");
@@ -628,9 +625,8 @@ void store_game(game_id *curr_game){
   while (fgets(line, 256, temp) != NULL) {
     fprintf(fp, "%s", line);
   }
-  
-  fclose(fp);
   flock(fileno(fp), LOCK_UN);
+  fclose(fp);
   fclose(temp);
 
   remove(temp_filename); // delete auxiliary file
@@ -856,8 +852,6 @@ void message_tcp() {
   ssize_t n;
   socklen_t addrlen;
   struct sockaddr_in addr;
-  char buffer[256];
-  char *response;
 
   fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
   if (fd == -1) {
@@ -903,14 +897,17 @@ void message_tcp() {
       perror(ERR_FORK);
       exit(1);
     }
-    if (pid == 0) { // Child process // TODO SIGCHILD
+    if (pid == 0) { // Child process
       puts(CONN_ACCP);
 
-      n = read(newfd, buffer, 256); // TODO VALGRIND WARN
+      char buffer[256];
+
+      n = read(newfd, buffer, 256);
       if (n == -1) {
         perror(ERR_READ);
         exit(1);
       }
+      buffer[n] = 0;
 
       if (verbose == 1) {
         puts(TCP_RECV);
@@ -920,10 +917,12 @@ void message_tcp() {
       parse_message_tcp(buffer, newfd);
 
       if (verbose == 1) {
-        printf("--------------------\n"); // just to separate the messages
+        puts("--------------------"); // just to separate the messages
       }
+
+      freeaddrinfo(res);
       close(newfd);
-      exit(0);
+      return;
     }
   }
 
@@ -1246,10 +1245,10 @@ static void handler(int signum) {
   switch (signum) {
   case SIGINT:
     puts(SERVER_SD);
-    if (tcp == 0) {
+    if (tcp == 0)
       delete_table();
-      freeaddrinfo(res);
-    }
+
+    freeaddrinfo(res);
     exit(0);
   default:
     puts(IG_SIG);
@@ -1268,64 +1267,59 @@ void check_gamesFolder(){
   }
 }
 
-// FIX THIS, probably get message as argument and go from there
+// Verifies request follows protocol and is valid
 int clear_input(char *message) {
   // 0 = clear input
   // 1 = error
   int i = 0;
   char code[4];
   char plid[7];
-  int trial;
 
-  // messages like "CODE PLID\n"
-  while (message[i] != ' ') {
-    code[i] = message[i];
-    i++;
-  }
-  code[i] = '\0';
-  i++;
-  while (message[i] != ' ' || message[i] != '\n') {
-    plid[i] = message[i];
-    i++;
-  }
-  plid[i] = '\0';
-  i++;
+  sscanf(&message[i], "%3s", code);
+  i += strlen(code);
 
-  // messages like "CODE PLID x TRIAL\n"
-  if (strcmp(code, PLG) == 0 || strcmp(code, PWG) == 0){
-    if (strcmp(code, PLG) == 0){
-      char letter = message[i++];
-      i++;
-    }
-
-    else{
-      char word[31];
-      int j = 0;
-      while (message[i] != ' ') {
-        word[j] = message[i];
-        i++;
-        j++;
-      }
-      word[j] = '\0';
-      i+2;
-    }
-    trial = atoi(&message[i]);
-    i++;
-  }
-
-  if (message[i] != '\n' && message[++i] != '\0') {
+  // messages like CODE\n actually
+  if (strcmp(code, GSB) == 0) {
+    if (message[i] == '\n' && message[i+1] == '\0')
+      return 0;
     return 1;
   }
-  return 0;
 
-  //int c;
-  //int ret = 0;
-//
-  //while ((c = getchar()) != '\n') {
-  //  if (c != ' ' && c != '\t')
-  //    ret = 1;
-  //}
-  //return ret;
+  // messages like "CODE PLID ?\n"
+  if (message[i] != ' ' || message[++i] == ' ')
+    return 1;
+
+  sscanf(&message[i], "%6s", plid);
+  i += strlen(plid);
+
+  if (is_number(plid) == 0 || strlen(plid) != 6 
+   || message[++i] == ' ')
+    return 1;
+    
+  // messages like "CODE PLID x TRIAL\n"
+  if (strcmp(code, PLG) == 0 || strcmp(code, PWG) == 0){
+    if (message[i-1] != ' ') return 1;
+
+    char word[31];
+    int trial;
+    if (strcmp(code, PLG) == 0){
+      word[0] = message[i++]; //A 1\n\0
+      word[1] = '\0';
+    }
+    else {
+      sscanf(&message[i], "%30s", word);
+      i += strlen(word);
+    }
+    if (is_word(word) == 0 || message[i++] != ' ')
+      return 1;
+
+    sscanf(&message[i], "%d", &trial);
+    i += strlen(&message[i]);
+  }
+
+  if (message[i-1] != '\n' || message[i] != '\0')
+    return 1;
+  return 0;
 }
 
 int is_word(char* buf) {
