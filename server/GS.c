@@ -43,6 +43,7 @@ int count = 1; // keep track of next word to assign
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
+  // handle signals
   signal(SIGPIPE, handler);
   signal(SIGINT, handler);
   signal(SIGCHLD, SIG_IGN); // ignore child signals
@@ -77,12 +78,17 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-// Functions related to table
+/*--------------------------------------------------------------------------------------------------------------------------------------
+
+                                      FUNCTIONS RELATED TO TABLE OF GAMES
+
+---------------------------------------------------------------------------------------------------------------------------------------*/
 
 int hash(char* plid) {
   return atoi(plid) % table_size;
 }
 
+// function to set a game and its data in table of games
 int set_game(char* plid) {
   int word_length = -1;
   int hash_value = hash(plid);
@@ -108,6 +114,7 @@ int set_game(char* plid) {
   return 0;
 }
 
+// function to resize table of games
 int resize_table() { // TODO TEST IF WORKS
   game_id** new_table = malloc(sizeof(game_id*) * table_size * 2);
   if (new_table == NULL) {
@@ -136,6 +143,7 @@ int resize_table() { // TODO TEST IF WORKS
   return 0;
 }
 
+// function to delete table of games
 int delete_table() {
   for (int i = 0; i < table_size; i++) {
     game_id* curr = games[i];
@@ -193,6 +201,7 @@ void parse_args(int argc, char *argv[]) {
    --------------------------------------------------------------------------------------------------------------
  */
 
+// Handle UDP messages
 void message_udp() {
   int fd, errcode;
   int n;
@@ -291,6 +300,7 @@ char* parse_message_udp(char *message) {
   }
 }
 
+// function to start a new game
 char* start_new_game(char *message) {
   char code[4];
   char plid[7];
@@ -301,7 +311,7 @@ char* start_new_game(char *message) {
 
   sscanf(message, "%3s %6s", code, plid);
 
-  if (clear_input(message) != 0) {
+  if (clear_input(message) != 0) { // sintax error
     sprintf(response, "%s %s\n", SNG, ERR);
     return response;
   }
@@ -332,6 +342,7 @@ char* start_new_game(char *message) {
   return response;
 }
 
+// function to handle the play letter request
 char* play_letter(char *message) {
   char status[4];
   char code[4];
@@ -353,7 +364,7 @@ char* play_letter(char *message) {
     printf("[%s] Player %s requested to play letter %s.\n", code, plid, letter);
 
   game_id *game_id = get_game(plid);
-  if (game_id != NULL && game_id->game_data != NULL) {          // 1: THERES AN ACTIVE GAME FOR PLAYER
+  if (game_id != NULL && game_id->game_data != NULL) { // 1: CHECK IF THERE'S AN ACTIVE GAME FOR PLAYER
     game_data *game = game_id->game_data;
 
     if (trial != game->trial) {   // 2: TRIAL NUMBER DOESNT MATCH -> INV
@@ -423,7 +434,7 @@ char* play_letter(char *message) {
       strcat(game->letters_played, letter); // add letter played to list
     }
 
-  } else {
+  } else { // NO ACTIVE GAME FOR PLAYER OR SINTAX ERROR
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RLG, status);
   }
@@ -431,6 +442,7 @@ char* play_letter(char *message) {
   return buffer;
 }
 
+// function to handle guess word requests
 char* guess_word(char *message) {
   char code[4];
   char plid[7];
@@ -441,7 +453,6 @@ char* guess_word(char *message) {
   buffer = (char*) malloc(256 * sizeof(char));
 
   sscanf(message, "%s %6s %30s %d", code, plid, word, &trial);
-  // TODO do we format word later toupper?
   if (clear_input(message) != 0) {
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RWG, status);
@@ -456,22 +467,22 @@ char* guess_word(char *message) {
   if (game_id != NULL && game_id->game_data != NULL){
     game_data *game = game_id->game_data;
     
-    if (trial != game->trial){
+    if (trial != game->trial){ 
       if (trial == game->trial-1 && game->guesses->word != NULL
        && strcmp(game->guesses->word, word) == 0){
         return NULL; // RESEND LAST GUESS RESPONSE TODO
       }
-      else{
+      else{ // TRIAL NUMBER DOESNT MATCH -> INV
         strcpy(status, INV);
         sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
       }
     }
-    else if (word_played(word, game->guesses) == 1){
+    else if (word_played(word, game->guesses) == 1){ // WORD ALREADY PLAYED -> DUP
       strcpy(status, DUP);
       sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
     }
 
-    else{
+    else{ 
       // add word to guessed_words and link them
       game->guesses->word = (char*) malloc((strlen(word)+1) * sizeof(char));
       strcpy(game->guesses->word, word);
@@ -480,7 +491,7 @@ char* guess_word(char *message) {
       next_word->prev = game->guesses;
       game->guesses = next_word;
 
-      if (strcmp(game->word, word) == 0){
+      if (strcmp(game->word, word) == 0){ // WORD IS GUESSED -> WIN
         strcpy(status, WIN);
         sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
 
@@ -493,7 +504,7 @@ char* guess_word(char *message) {
       else{
         game->errors++;
 
-        if (game->errors > game->max_errors){ // GAMEOVER
+        if (game->errors > game->max_errors){ // MAX ERRORS REACHED -> OVR
           strcpy(status, OVR);
           update_game_status(game_id, word, OVR);
           sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
@@ -508,13 +519,14 @@ char* guess_word(char *message) {
       }
     }
   }
-  else{
+  else{ // NO ACTIVE GAME FOR PLAYER OR SINTAX ERROR
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RWG, status);
   }
   return buffer;
 }
 
+// function to handle quit requests
 char* quit(char *message) {
   char code[4];
   char plid[7];
@@ -524,7 +536,8 @@ char* quit(char *message) {
 
   sscanf(message, "%s %6s", code, plid);
 
-  if (get_game(plid) == NULL || clear_input(message) != 0) { // TODO || 
+  if (get_game(plid) == NULL || clear_input(message) != 0) {
+     // NO ACTIVE GAME FOR PLAYER OR SINTAX ERROR
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RQT, status);
     return buffer;
@@ -533,14 +546,12 @@ char* quit(char *message) {
   if (verbose == 1)
     printf("[%s] Player %s requested to quit the game.\n", code, plid);
 
-  game_id *curr_game = get_game(plid);
-  // ACTIVE GAME FOUND
+  game_id *curr_game = get_game(plid); // ACTIVE GAME FOUND
   delete_game(curr_game); // DELETE GAME
   strcpy(status, OK);
 
   sprintf(buffer, "%s %s\n", RQT, status);
   // send message to client
-  // store game in scoreboard
   return buffer;
 }
 
@@ -553,6 +564,7 @@ char* quit(char *message) {
    --------------------------------------------------------------------------------------------------------------
  */
 
+// function to store game in scoreboard if score worthy
 void store_game(game_id *curr_game){
   char line[256];
   int trials = (curr_game->game_data->trial);
@@ -589,6 +601,7 @@ void store_game(game_id *curr_game){
   int temp_trials;
   int temp_succ_trials;
   char temp_word[31];
+  // check if game should replace a score in scoreboard
   while (fgets(line, 256, fp) != NULL && counter < 11){
     sscanf(line, "%d %s %d %d %s", &temp_score, plid, &temp_succ_trials, &temp_trials, temp_word);
     if (done == 0) { // try to add new score
@@ -634,6 +647,7 @@ void store_game(game_id *curr_game){
   remove(temp_filename); // delete auxiliary file
 }
 
+// Function to add a line to the scoreboard at the end of the file
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
 
   int trials = (curr_game->game_data->trial);
@@ -658,7 +672,7 @@ void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
    --------------------------------------------------------------------------------------------------------------
  */
 
-// Returns the length of the word
+// Function to set game data, returns the length of the word
 int set_game_data(game_id * game_id) {
   char word[31];
   char file[64];
@@ -672,16 +686,7 @@ int set_game_data(game_id * game_id) {
     exit(1);
   }
 
-  // // get random number
-  // srand(time(0));
-  // random_number = rand() % SIZE_WORDFILE; 
-  // // dont forget to update wordfile size
-
-  // // get word from file
-  // for (i = 0; i <= random_number; i++) {
-  //   fscanf(fp, "%s %s", word, file);
-  // }
-
+  // select word sequentially
   // Get number of lines in file
   int size = 0;
   while (fscanf(fp, "%s %s", word, file) != EOF) {
@@ -738,6 +743,7 @@ int set_game_data(game_id * game_id) {
   return word_length;
 }
 
+// Function to get the game with the given plid
 game_id *get_game(char *plid) {
   game_id *curr_game = games[hash(plid)];
   while (curr_game != NULL) {
@@ -757,6 +763,7 @@ int letter_in_word(char *letters_guessed, char *letter) {
   return 0;
 }
 
+// Function to delete a game
 void delete_game(game_id *game) {
 
   // Free everything in game_data
@@ -779,6 +786,7 @@ void delete_game(game_id *game) {
   }
 }
 
+// Function which checks if word has already been played
 int word_played(char *word, guessed_word *guessed_words) {
 
   while (guessed_words != NULL) {
@@ -799,6 +807,7 @@ int word_played(char *word, guessed_word *guessed_words) {
    --------------------------------------------------------------------------------------------------------------
  */
 
+// function to update game status after each valid play made (letter or word)
 void update_game_status(game_id *game, char* attempt, char* status) {
   char filename[256];
   char st_filename[256];
@@ -849,6 +858,7 @@ void update_game_status(game_id *game, char* attempt, char* status) {
    --------------------------------------------------------------------------------------------------------------
  */
 
+// Function which handles TCP messages
 void message_tcp() {
   int fd, newfd, errcode;
   ssize_t n;
@@ -932,14 +942,15 @@ void message_tcp() {
   freeaddrinfo(res);
 }
 
+// function to parse message received from client and call the correct function
 void parse_message_tcp(char *message, int fd){
   char code[4];
   char plid[7];
 
   sscanf(message, "%s", code);
 
-  if (strcmp(code, GSB) == 0){
-    if (clear_input(message) != 0){
+  if (strcmp(code, GSB) == 0){ // scoreboard
+    if (clear_input(message) != 0){ // check if it is valid
       char* response = (char*) malloc(9 * sizeof(char));
       sprintf(response, "%s %s\n", code, ERR);
       send_message_tcp(fd, response);
@@ -949,8 +960,8 @@ void parse_message_tcp(char *message, int fd){
     get_scoreboard(fd);
   }
 
-  else if(strcmp(code, GHL) == 0){
-    if (clear_input(message) != 0){
+  else if(strcmp(code, GHL) == 0){ // hint
+    if (clear_input(message) != 0){ // check if it is valid
       char* response = (char*) malloc(9 * sizeof(char));
       sprintf(response, "%s %s\n", code, ERR);
       send_message_tcp(fd, response);
@@ -961,8 +972,8 @@ void parse_message_tcp(char *message, int fd){
     get_hint(fd, plid);
   }
 
-  else if(strcmp(code, STA) == 0){
-    if (clear_input(message) != 0){
+  else if(strcmp(code, STA) == 0){ //state
+    if (clear_input(message) != 0){ // check if it is valid
       char* response = (char*) malloc(9 * sizeof(char));
       sprintf(response, "%s %s\n", code, ERR);
       send_message_tcp(fd, response);
@@ -973,7 +984,7 @@ void parse_message_tcp(char *message, int fd){
     state(plid, fd);
   }
 
-  else{
+  else{ // error
     char* response = (char*) malloc(6 * sizeof(char));
     sprintf(response, "%s\n", ERR);
     send_message_tcp(fd, response);
@@ -982,8 +993,7 @@ void parse_message_tcp(char *message, int fd){
 }
 
 /* Function which writes to file in directory GAMES and file game_plid.txt 
-* the current state of the game.
-*/
+the current state of the game. */
 char* state(char* plid, int fd) {
   char filename[256]; // File with game history
   char st_filename[256]; // File with game status
@@ -1066,13 +1076,17 @@ char* state(char* plid, int fd) {
     sprintf(reply, "%s %s %s %ld ", RST, ACT, filename, strlen(file));
   }
 
+  //send message
   send_message_tcp(fd, reply);
   send_file(fd, file, strlen(file));
+  send_message_tcp(fd, "\n");
+
   free(file);
   free(reply);
   fclose(fp);
 }
 
+// function that sents the hint to the player
 void get_hint(int fd, char* plid){
   char status[4];
   char st_filename[64];
@@ -1136,14 +1150,17 @@ void get_hint(int fd, char* plid){
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize +5);
   sprintf(reply, "%s %s %s %ld ", RHL, OK, word_file, fsize);
 
+  //send message
   send_message_tcp(fd, reply);
   send_file(fd, file, fsize);
   send_message_tcp(fd, "\n");
+
   free(reply);
   free(file);
   free(filename);
 }
 
+// get scoreboard
 void get_scoreboard(int fd){
   char *reply;
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
@@ -1211,6 +1228,7 @@ void get_scoreboard(int fd){
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(filename) + fsize + 2);
   sprintf(reply, "%s %s %s %ld ", RSB, OK, filename, fsize);
 
+  //send message
   send_message_tcp(fd, reply);
   send_file(fd, file, fsize);
   send_message_tcp(fd, "\n");
@@ -1232,6 +1250,7 @@ void get_scoreboard(int fd){
    --------------------------------------------------------------------------------------------------------------
  */
 
+// function to send a message only in tcp
 void send_message_tcp(int fd, char* message){
   ssize_t n = write(fd, message, strlen(message));
   while (n < strlen(message)) {
@@ -1239,6 +1258,7 @@ void send_message_tcp(int fd, char* message){
   }
 }
 
+// function to send a file only in tcp
 void send_file(int fd, char* file, int fsize){
   ssize_t n = write(fd, file, fsize);
   while (n < fsize) {
@@ -1246,6 +1266,7 @@ void send_file(int fd, char* file, int fsize){
   }
 }
 
+// function to handle signals
 static void handler(int signum) {
   switch (signum) {
   case SIGINT:
@@ -1260,6 +1281,7 @@ static void handler(int signum) {
   }
 }
 
+// check if game folder exists, if not create it
 void check_gamesFolder(){
   DIR *dir = opendir(GAMES_DIR);
   if (dir) {
@@ -1327,6 +1349,7 @@ int clear_input(char *message) {
   return 0;
 }
 
+//check if is a word
 int is_word(char* buf) {
   int i = 0;
   for (i = 0; i < strlen(buf); i++) {
@@ -1340,6 +1363,7 @@ int is_word(char* buf) {
   return 1;
 }
 
+// check if is a number
 int is_number(char* buf) {
   int i = 0;
   for (i = 0; i < strlen(buf); i++) {
@@ -1352,6 +1376,7 @@ int is_number(char* buf) {
   return 1;
 }
 
+// check if filename is valid
 int check_filename(char* filename) {
   char buffer[25] = "";
   int ext = 0;
