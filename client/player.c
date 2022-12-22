@@ -18,6 +18,9 @@ struct current_game {
 
 struct current_game current_game;
 
+int sig_int = 0; // Flag to handle SIGINT in TCP connections
+struct addrinfo hints, *res; // Global to be freed in signal handling
+
 int main(int argc, char *argv[]) {
   signal(SIGPIPE, handler); // Ignore SIGPIPE (broken pipe)
   signal(SIGINT, handler); // Handle SIGINT (Ctrl+C)
@@ -36,7 +39,6 @@ int main(int argc, char *argv[]) {
       start_function();
     }
 
-    // TODO check if game_ongoing == 1??
     else if (strcmp(command, PLAY) == 0 || strcmp(command, PL) == 0) {
       play_function();
     }
@@ -127,7 +129,7 @@ void get_ip() {
 }
 
 void get_ip_known_host(char *host) {
-  struct addrinfo hints, *res, *p;
+  struct addrinfo *p;
   int errcode;
   char buffer[INET_ADDRSTRLEN];
   struct in_addr *addr;
@@ -158,7 +160,7 @@ void start_function() {
 
   if (read_input(t_plid, 7) != 0) {
     puts(ERR_INPUT);
-    exit(1);
+    return;
   }
 
   if (clear_input() == 1) {
@@ -195,7 +197,7 @@ void play_function() {
   // Get letter
   if (read_input(letter, 2) != 0) {
     puts(ERR_INPUT);
-    exit(1);
+    return;
   }
   letter[0] = toupper(letter[0]);
 
@@ -232,7 +234,7 @@ void guess_function() {
   // Get word
   if (read_input(guess, 31) != 0) {
     puts(ERR_INPUT);
-    exit(1);
+    return;
   }
 
   // Verify validity of input and theres no tailing characters
@@ -335,7 +337,6 @@ void message_udp(char *buffer) {
   int fd, errcode;
   ssize_t n;
   socklen_t addrlen;
-  struct addrinfo hints, *res;
   struct sockaddr_in addr;
   char response[128];
 
@@ -353,7 +354,7 @@ void message_udp(char *buffer) {
   errcode = getaddrinfo(ip, port, &hints, &res);
   if (errcode != 0) {
     fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
-    exit(1);
+    return;
   }
 
   n = sendto(fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen);
@@ -380,6 +381,8 @@ void message_udp(char *buffer) {
   if (n == -1) {  // CHECK IF CONNECTION DROPPED OR ETC
     perror(ERR_RECVFROM);
     puts(ERR_CONNECTION);
+    freeaddrinfo(res);
+    close(fd);
     return;
   }
 
@@ -602,14 +605,14 @@ int read_buffer2string(int fd, char *string) {
   n = read(fd, buffer + bytes, 1); // read from socket (byte by byte)
   if (n <= 0) {
     puts(ERR_READ);
-    exit(1);
+    return 1;
   } // until space or newline is found
   while ((buffer[bytes] != ' ') && (buffer[bytes] != '\n')) {
     bytes++;
     n = read(fd, buffer + bytes, 1);
     if (n <= 0) {
       puts(ERR_READ);
-      exit(1);
+      return 1;
     }
   }
   buffer[bytes++] = '\0';
@@ -627,24 +630,47 @@ void get_file(int fd, int toPrint) {
   int bytes = 0;
   int to_read;
 
+  //Let the player quit the function with SIGINT
+  signal(SIGINT, handler_tcp);
+
   // READ FILENAME
-  bytes += read_buffer2string(fd, filename);
+  n = read_buffer2string(fd, filename);
+  if (n = 0) {
+    puts(ERR_READ);
+    signal(SIGINT, handler);
+    return;
+  }
+  bytes += n;
 
   // READ FILESIZE
-  bytes += read_buffer2string(fd, filesize_str);
+  n = read_buffer2string(fd, filesize_str);
+  if (n = 0) {
+    puts(ERR_READ);
+    signal(SIGINT, handler);
+    return;
+  }
+  bytes += n;
   filesize = atoi(filesize_str);
+
+  // Verify file size isn't greather than 1GiB
+  if (filesize > 1024*1024*1024) {
+    puts(ERR_FILESIZE);
+    signal(SIGINT, handler);
+    return;
+  }
 
   // READ AND WRITE IMAGE
   FILE *fp = fopen(filename, "w");
   if (fp == NULL) {
     perror(ERR_OPEN_FILE);
-    exit(1);
+    signal(SIGINT, handler);
+    return;
   }
 
   response = (char*)malloc(filesize*sizeof(char));
 
-  bytes = 0;
-  while (bytes < filesize) {
+  bytes = 0; // check if signal was received with sig_int var
+  while (bytes < filesize && sig_int == 0) {
     if (READ_AMOUNT > filesize - bytes)
       to_read = filesize - bytes;
     else
@@ -652,12 +678,12 @@ void get_file(int fd, int toPrint) {
     n = read(fd, response + bytes, to_read);
     if (n <= 0) {
       perror(ERR_READ);
-      exit(1);
+      return;
     }
     n = fwrite(response + bytes, 1, n, fp);
     if (n <= 0) {
       perror(ERR_WRITE_FILE);
-      exit(1);
+      return;
     }
     bytes += n;
   }
@@ -673,13 +699,20 @@ void get_file(int fd, int toPrint) {
     puts("----------^FILE^-----------");
   }
   free(response);
+  signal(SIGINT, handler);
+
+  // read the newline character
+  n = read(fd, response, 1);
+  if (n <= 0 || response[0] != '\n') {
+    perror(ERR_READ);
+    return;
+  }
 }
 
 void message_tcp(char *buffer) {
   int fd, errcode, errno;
   ssize_t n;
   socklen_t addrlen;
-  struct addrinfo hints, *res;
   struct sockaddr_in addr;
   int bytes;
 
@@ -693,23 +726,12 @@ void message_tcp(char *buffer) {
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
 
-  // Timeout for TCP socket
-  struct timeval tv = {TIMEOUT, 0};
-  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv) < 0) {
-    if (errno == ETIMEDOUT) {
-      printf(ERR_TIMEOUT);
-      return;
-    } else {
-      perror("setsockopt");
-      exit(1);
-    }
-  }
-
   errcode = getaddrinfo(ip, port, &hints, &res);
   if (errcode != 0) {
     fprintf(stderr, ERR_GETADDRINFO, gai_strerror(errcode));
-    exit(1);
+    freeaddrinfo(res);
+    close(fd);
+    return;
   }
 
   n = connect(fd, res->ai_addr, res->ai_addrlen);
@@ -720,7 +742,9 @@ void message_tcp(char *buffer) {
     n = write(fd, buffer + bytes, strlen(buffer) - bytes);
     if (n <= 0) {
       perror(ERR_WRITE);
-      exit(1);
+      freeaddrinfo(res);
+      close(fd);
+      return;
     }
     bytes += n;
   }
@@ -734,6 +758,18 @@ void message_tcp(char *buffer) {
 void parse_response_tcp(int fd) {
   char code[4];
   char status[7];
+
+  // Timeout for TCP socket
+  struct timeval tv = {TIMEOUT, 0};
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv) < 0) {
+    if (errno == ETIMEDOUT) {
+      printf(ERR_TIMEOUT);
+      return;
+    } else {
+      perror("setsockopt");
+      exit(1);
+    }
+  }
 
   // READ CODE
   read_buffer2string(fd, code);
@@ -783,7 +819,7 @@ static void handler(int signum) {
   switch (signum) {
   case SIGINT:
     printf(CLOSING_SIGNAL);
-    exit(1);
+    exit(0);
   case SIGPIPE:
     printf(BROKEN_PIPE);
     exit(1);
@@ -842,4 +878,14 @@ int read_input(char* buffer, int size) {
   if (c == '\n')
     ungetc(c, stdin);
   return 0;
+}
+
+const void handler_tcp(int signum) {
+  switch (signum) {
+    case SIGINT: // stop curr connection
+      sig_int = 1; 
+      break;
+    default:
+      break;
+  }
 }

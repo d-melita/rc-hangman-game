@@ -28,7 +28,8 @@
 #define MAX_ERRORS 8 // Maximum number of errors allowed
 #define SIZE_WORDFILE 10
 #define DEFAULT_TABLE_SIZE 15625 // max 64 collisions, 125kb
-#define MAX_TABLE_SIZE 1000000 // 1mb
+#define MAX_TABLE_SIZE 1000000 // no collisions, 8mb
+#define TIMEOUT 5 // seconds
 
 // CODES
 #define SNG "SNG"
@@ -118,6 +119,7 @@
 #define ERR_FSCANF "ERROR: Fscanf failed"
 #define ERR_FREAD "ERROR: Fread failed"
 #define ERR_OPENDIR "ERROR: Opendir failed"
+#define ERR_TIMEOUT "ERROR: Connection timed out"
 
 // SCOREBOARD HEADER
 #define SCOREBOARD_HEADER "   SCORE    PLID    SUCCESSFULL TRIALS    TOTAL TRIALS    WORD  \n"
@@ -125,56 +127,222 @@
 
 // prototypes
 // structs
-struct game_data;
-struct game_id;
-struct guessed_word;
 
+struct game_data; // Game state (word progress, errors, etc)
+struct game_id; // Player id and associated game data, etc
+struct guessed_word; // Array of guessed words
+
+/// Get hash of player id for hash table.
+///
+/// \param plid player id
+/// \return hash of player id
 int hash(char* plid);
+
+/// Add game to memory.
+///
+/// \param plid player id of new game
+/// \return 0 if successful, 1 otherwise
 int set_game(char* plid);
+
+/// Resize hash table to, by default, double of its size.
+///
+/// \return 0 if successful, 1 otherwise
 int resize_table();
 
+// Parse arguments from argv
 void parse_args(int argc, char *argv[]);
 
-// UDP functions
+// UDP functions /////////////////////////////////////
+
+/// Handle TCP connections.
+///
+/// \return void
 void message_udp();
+
+/// Parse UDP message from client.
+///
+/// \param message udp message received
+/// \return message to be sent to udp client
 char* parse_message_udp(char *message);
+
+/// Start new game requested by udp client.
+///
+/// \param message udp message received
+/// \return message to be sent to udp client
 char* start_new_game(char *message);
+
+/// Respond to a play letter request from UDP client.
+///
+/// \param message udp message received
+/// \return message to be sent to udp client
 char* play_letter(char *message);
+
+/// Respond to a guess from UDP client.
+/// 
+/// \param message udp message received
+/// \return message to be sent to udp client
 char* guess_word(char *message);
+
+/// Respond to a quit request from UDP client.
+///
+/// \param message udp message received
+/// \return message to be sent to udp client
 char* quit(char *message);
 
-// add game to scoreboard
-void store_game(struct game_id* game_id);
+/// Attempt to add a new game record to scoreboard.
+/// Calls 'add_scoreboard_line' to add the line to the scoreboard.
+///
+/// \param game_id game id struct of the game
+///
+/// \return 0 if successful, 1 otherwise
+int store_game(struct game_id* game_id);
+
+/// Attempt to add a new game record to scoreboard.
+///
+/// \param fp scoreboard file
+/// \param game_id game id struct of the game
+///
+/// \return void
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game);
 
-// aux functions to UDP functions
+// aux functions to UDP functions ////////////////////////////////
+
+/// Setup game data for a new game.
+///
+/// \param game_id game id struct of the game
+///
+/// \return void
 int set_game_data(struct game_id* game_id);
+
+/// Get game from memory.
+///
+/// \param plid player id
+///
+/// \return game_id struct
 struct game_id* get_game(char* plid);
+
+/// Verify if given letter is in given word.
+/// Used to check if letter was already played.
+///
+/// \param word word to be checked
+/// \param letter letter to be checked
+///
+/// \return 1 if letter is in word, 0 otherwise
 int letter_in_word(char* word, char* letter);
+
+/// Delete game (data) from memory. Keeps the game_id (player id).
+///
+/// \param game_id game id
+///
+/// \return void
 void delete_game(struct game_id* game_id);
+
+/// Check if word guess attempt was already made.
+///
+/// \param word word to be checked
+/// \param guessed_words array of previous guess attempts
+///
+/// \return 1 if guess was already attempted, 0 otherwise
 int word_played(char* word, struct guessed_word* guessed_words);
 
-// udpdate game status
-void update_game_status(struct game_id *game, char* attempt, char* status);
+/// Update game status after a correct play or guess was made.
+///
+/// \param game game id
+/// \param attempt attempt made by player (letter or word)
+/// \param status status of attempt (OK, WIN, OVR)
+///
+/// \return 0 on success, 1 otherwise
+int update_game_status(struct game_id *game, char* attempt, char* status);
 
-// TCP functions
+// TCP functions //////////////////////////////////////////////////////////
+
+/// Handle TCP connections.
+///
+/// \return void
 void message_tcp();
+
+/// Parse message received from client via TCP.
+///
+/// \param message message received from client
+/// \param fd file descriptor of socket connection to client
+///
+/// \return void
 void parse_message_tcp(char *message, int fd);
+
+/// Send the state of the game to client.
+///
+/// \param plid player id
+/// \param fd file descriptor of socket connection to client
+///
+/// \return void
 char* state(char* plid, int fd);
+
+/// Send a hint to client.
+///
+/// \param fd file descriptor of socket connection to client
+/// \param plid player id
+///
+/// \return void
 void get_hint(int fd, char* plid);
+
+/// Send the scoreboard to client.
+///
+/// \param fd file descriptor of socket connection to client
+///
+/// \return void
 void get_scoreboard(int fd);
 
 // aux functions to TCP functions
+
+/// Send message to client via TCP.
+///
+/// \param fd file descriptor of socket connection to client
+/// \param message message to be sent
+///
+/// \return void
 void send_message_tcp(int fd, char* message);
+
+/// Send file to client.
+///
+/// \param fd file descriptor of socket connection to client
+/// \param file file to be sent
+/// \param fsize size of file to be sent
+///
+/// \return void
 void send_file(int fd, char* file, int fsize);
 
+/// Delete the hash table.
+///
+/// \return 0 on success, 1 on error
 int delete_table();
 
-void check_gamesFolder();
+/// Check existence of GAMES folder and create it if it doesn't exist.
+///
+/// \return 0 if folder exists or was created, 1 on error
+int check_gamesFolder();
+
+/// Verifies if given buffer is only composed of letters.
+///
+/// \param buf buffer to be verified
+/// \return 1 if buffer is only composed of letters, 0 otherwise
 int is_word(char* buf);
+
+/// Verifies if given buffer is only composed of digits.
+///
+/// \param buf buffer to be verified
+/// \return 1 if buffer is only composed of digits, 0 otherwise
 int is_number(char* buf);
+
+/// Verifies if given message follows the protocol and
+/// is valid.
+///
+/// \param message message to be verified
+/// \return 0 if message is valid, 1 otherwise
 int clear_input(char* message);
 
+/// Signal handler.
+///
+/// \param signum signal number
 static void handler(int signum);
 
 #endif

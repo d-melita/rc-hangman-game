@@ -3,36 +3,39 @@
 // STRUCT FOR MATCH
 
 typedef struct game_data {
-  int trial;
-  char *word;
-  char *file;
-  int errors;
-  int max_errors;
+  int trial; // trial number
+  char *word; // word to guess
+  char *file; // file name
+  int errors; // number of errors made
+  int max_errors; // number of errors allowed
   int letters_guessed; // number of letters correctly guessed
   char letters_played[31]; // 30 max word size + \0
-  struct guessed_word *guesses;
+  struct guessed_word *guesses; // list of guessed words
 
-  char last_letter[2];
-  char word_status[31];
+  char last_letter[2]; // last letter played
+  char word_status[31]; // 30 max word size + \0
+  char* last_response; // last response to a play or guess
 } game_data;
 
 typedef struct game_id {
-  char plid[7];
-  struct game_id *prev;
-  struct game_data *game_data;
+  char plid[7]; // player id
+  struct game_id *prev; // previous game_id in the same hash bucket
+  struct game_data *game_data; // game data
 } game_id;
 
 typedef struct guessed_word {
-  char *word;
-  struct guessed_word *prev;
+  char *word; // guessed word
+  struct guessed_word *prev; // previous guessed_word
 } guessed_word;
 
 
-int table_size = DEFAULT_TABLE_SIZE;
-int num_games = 0;
+// Initiliaze global variables
+
+int table_size = DEFAULT_TABLE_SIZE; // size of table
+int num_games = 0; // number of games in table
 game_id** games; // array of game_id pointers
 
-int tcp = 0;
+int tcp = 0; // flag to differentiate between TCP and UDP process
 struct addrinfo hints, *res;
 
 char port[6];
@@ -40,6 +43,7 @@ char wordfile[256];
 int verbose = 0; // 0 false, 1 true
 int count = 1; // keep track of next word to assign
 
+// main
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
@@ -55,22 +59,21 @@ int main(int argc, char *argv[]) {
   int pid = fork();
 
   if (pid == 0) {
-    // Child process
+    // Child process is TCP
     tcp = 1; // flag to ignore table deletion later
     
-    message_tcp();
+    message_tcp(); // enter TCP loop
   } else if (pid > 0) {
     // Parent process
     games = malloc(sizeof(game_id*) * DEFAULT_TABLE_SIZE);
     if (games == NULL) {
       perror(ERR_MALLOC);
       exit(1);
-    }
+    } // initialize table
     memset(games, 0, sizeof(game_id*) * DEFAULT_TABLE_SIZE);
 
-    message_udp();
+    message_udp(); // enter UDP loop
   } else {
-    // Error
     perror(ERR_FORK);
     exit(1);
   }
@@ -85,85 +88,96 @@ int main(int argc, char *argv[]) {
 ---------------------------------------------------------------------------------------------------------------------------------------*/
 
 int hash(char* plid) {
+  // hash is just the plid (converted to int),
+  // but rescaled to fit the table size
   return atoi(plid) % table_size;
 }
 
-// function to set a game and its data in table of games
 int set_game(char* plid) {
   int word_length = -1;
   int hash_value = hash(plid);
   game_id* curr = get_game(plid);
   game_id* prev = NULL;
 
-  if (curr == NULL) {
+  if (curr == NULL) { // if game doesn't exist, create it
     curr = (game_id*) malloc(sizeof(game_id));
+    if (curr == NULL) {
+      perror(ERR_MALLOC);
+      return 1;
+    }
     strcpy(curr->plid, plid);
-    curr->prev = games[hash_value];
+    curr->prev = games[hash_value]; // join the collision chain on bucket
   }
 
-  word_length = set_game_data(curr);
+  word_length = set_game_data(curr); // set game data
+  if (word_length == 0)
+    return 1;
 
-  if (num_games >= (table_size/2)) {
+  if (num_games >= (table_size/2)) { // if table is half full, resize
     if (resize_table() != 0)
       return 1;
   }
 
-  games[hash_value] = curr;
+  games[hash_value] = curr; // set game atop hash value bucket
 
   num_games++;
   return 0;
 }
 
-// function to resize table of games
-int resize_table() { // TODO TEST IF WORKS
+int resize_table() {
+  // create new table with double the size
   game_id** new_table = malloc(sizeof(game_id*) * table_size * 2);
   if (new_table == NULL) {
     perror(ERR_MALLOC);
     return 1;
-  }
+  } // initialize table
   memset(new_table, 0, sizeof(game_id*) * table_size * 2); 
 
   int old_size = table_size;
   table_size *= 2;
   for (int i = 0; i < old_size; i++) {
-    game_id* curr = games[i]; // TODO
+    // go through each game in each bucket, rehash it and
+    // add it to new table, joining a new collision chain
+    game_id* curr = games[i]; // get the first game at bucket
     game_id* prev = NULL;
-    while (curr != NULL) {
-      int new_hash = hash(curr->plid);
+    while (curr != NULL) { // go through each game in bucket
+      int new_hash = hash(curr->plid); // rehash
       game_id* new_game = new_table[new_hash]; // get the game at new hash
       prev = curr->prev; // save pointer next pointer
       curr->prev = new_game; // join the new collision chain
       new_table[new_hash] = curr; // set it atop
-      curr = prev; // go to next
+      curr = prev; // go to next game in old bucket
     }
   }
 
   free(games);
-  games = new_table;
+  games = new_table; // swap to new table
   return 0;
 }
 
-// function to delete table of games
 int delete_table() {
   for (int i = 0; i < table_size; i++) {
-    game_id* curr = games[i];
+    game_id* curr = games[i]; // get the first game at bucket
     game_id* last = NULL;
-    while (curr != NULL) {
-      last = curr;
-      curr = curr->prev;
-      delete_game(last);
-      free(last);
+    while (curr != NULL) { // go through each game in bucket
+      last = curr; // save pointer to current game
+      curr = curr->prev; // go to next game in bucket
+      delete_game(last); // delete game data
+      free(last); // delete game
     }
   }
-  free(games);
+  free(games); // free table
   return 0;
 }
 
 // Parse the arguments given to the program (host and port)
 void parse_args(int argc, char *argv[]) {
-  // Two arguments, -v and -p
-  strcpy(port, DEFAULT_PORT); // TODO word file parameter
+  // Two arguments, -v and -p (can only be specified once)
+  int p = 0;
 
+  strcpy(port, DEFAULT_PORT);
+
+  // First argument is the wordfile
   if (argc < 1 || (access(argv[1], F_OK) == -1) || (access(argv[1], R_OK) == -1)) {
     puts(ERR_INVALID_WORDFILE);
     exit(1);
@@ -173,13 +187,14 @@ void parse_args(int argc, char *argv[]) {
 
   for (int i = 2; i < argc; i++) { // Parse each given option and argument
 
-    if (strcmp(argv[i], "-v") == 0) { // Verbose Option (-v)
+    if (strcmp(argv[i], "-v") == 0 && verbose == 0) { // Verbose Option (-v)
       // SET VERBOSE
       verbose = 1;
 
-    } else if (strcmp(argv[i], "-p") == 0) { // Port option (-p)
+    } else if (strcmp(argv[i], "-p") == 0 && p == 0) { // Port option (-p)
       if (i - 1 < argc) {
         strcpy(port, argv[++i]);
+        p = 1;
       } else {
         printf(ERR_MISSING_ARGUMENT, argv[i]);
         exit(1);
@@ -201,7 +216,6 @@ void parse_args(int argc, char *argv[]) {
    --------------------------------------------------------------------------------------------------------------
  */
 
-// Handle UDP messages
 void message_udp() {
   int fd, errcode;
   int n;
@@ -239,7 +253,8 @@ void message_udp() {
     n = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&addr, &addrlen);
     if (n == -1) {
       perror(ERR_RECVFROM);
-      exit(1);
+      sleep(TIMEOUT); // wait a little bit before trying again
+      continue;
     }
 
     buf[n] = '\0';
@@ -254,7 +269,9 @@ void message_udp() {
       n = sendto(fd, response, strlen(response), 0, (struct sockaddr *)&addr, addrlen);
       if (n == -1) {
         perror(ERR_SENDTO);
-        exit(1);
+        free(response);
+        sleep(TIMEOUT); // wait a little bit before trying again
+        continue;
       }
       
       if (verbose == 1) {
@@ -295,12 +312,15 @@ char* parse_message_udp(char *message) {
 
   else {
     char* response = (char*) malloc(6 * sizeof(char));
+    if (response == NULL) {
+      perror(ERR_MALLOC);
+      return NULL;
+    }
     sprintf(response, "%s\n", ERR);
     return response;
   }
 }
 
-// function to start a new game
 char* start_new_game(char *message) {
   char code[4];
   char plid[7];
@@ -308,6 +328,10 @@ char* start_new_game(char *message) {
   int word_length;
   char* response;
   response = (char*) malloc(256 * sizeof(char));
+  if (response == NULL) {
+    perror(ERR_MALLOC);
+    return NULL;
+  }
 
   sscanf(message, "%3s %6s", code, plid);
 
@@ -322,7 +346,7 @@ char* start_new_game(char *message) {
   game_id *curr_game = get_game(plid);  
   if (curr_game == NULL || curr_game->game_data == NULL) { // PLAYER HAS NO ONGOING GAME
     if (set_game(plid) != 0)
-      exit(1);
+      return NULL;
 
     curr_game = get_game(plid);
     word_length = strlen(curr_game->game_data->word);
@@ -331,7 +355,8 @@ char* start_new_game(char *message) {
 
     sprintf(response, "%s %s %d %d\n", RSG, status, word_length, MAX_ERRORS);
 
-    update_game_status(curr_game, NULL, ACT);
+    if (update_game_status(curr_game, NULL, ACT) != 0)
+      return NULL;
     if (verbose == 1)
       printf("New game started for %s with word: '%s'\n", plid, curr_game->game_data->word);
   } else { // PLAYER HAS AN ONGOING GAME
@@ -342,7 +367,6 @@ char* start_new_game(char *message) {
   return response;
 }
 
-// function to handle the play letter request
 char* play_letter(char *message) {
   char status[4];
   char code[4];
@@ -351,6 +375,10 @@ char* play_letter(char *message) {
   int trial;
   char* buffer;
   buffer = (char*) malloc(256 * sizeof(char));
+  if (buffer == NULL) {
+    perror(ERR_MALLOC);
+    return NULL;
+  }
 
   sscanf(message, "%s %6s %1s %d\n", code, plid, letter, &trial);
   letter[0] = toupper(letter[0]);
@@ -370,8 +398,8 @@ char* play_letter(char *message) {
     if (trial != game->trial) {   // 2: TRIAL NUMBER DOESNT MATCH -> INV
 
       if (trial == game->trial-1 &&
-       strcmp(game->last_letter, letter) == 0) // TODO
-        return NULL; // RESEND LAST PLAY RESPONSE TODO
+       strcmp(game->last_letter, letter) == 0)
+        strcpy(buffer, game->last_response);
       else {
         strcpy(status, INV);
         sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
@@ -404,11 +432,12 @@ char* play_letter(char *message) {
         if (game->letters_guessed == strlen(game->word)) {
           strcpy(status, WIN);
           sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
-          update_game_status(game_id, letter, WIN);
-          store_game(game_id);
+          if (update_game_status(game_id, letter, WIN) != 0 || store_game(game_id) != 0)
+            return NULL;
           delete_game(game_id);
         } else{
-          update_game_status(game_id, letter, ACT);
+          if (update_game_status(game_id, letter, ACT) != 0)
+            return NULL;
           strcpy(status, OK);
           sprintf(buffer, "%s %s %d %d%s\n", RLG, status, game->trial++, ocurrences, pos_str);
         }
@@ -421,11 +450,12 @@ char* play_letter(char *message) {
         if (game->errors > game->max_errors) {
           strcpy(status, OVR);
           sprintf(buffer, "%s %s %d\n", RLG, status, game->trial);
-          update_game_status(game_id, letter, OVR);
-          store_game(game_id);
+          if (update_game_status(game_id, letter, OVR) != 0 || store_game(game_id) != 0)
+            return NULL;
           delete_game(game_id);
         } else{ 
-          update_game_status(game_id, letter, ACT);
+          if (update_game_status(game_id, letter, ACT) != 0)
+            return NULL;
           strcpy(status, NOK);
           sprintf(buffer, "%s %s %d\n", RLG, status, game->trial++);
         }  
@@ -439,10 +469,18 @@ char* play_letter(char *message) {
     sprintf(buffer, "%s %s\n", RLG, status);
   }
 
+  // clear last response and save new one
+  free(game_id->game_data->last_response);
+  game_id->game_data->last_response = (char*) malloc(strlen(buffer) * sizeof(char));
+  if (game_id->game_data->last_response == NULL) {
+    perror(ERR_MALLOC);
+    return NULL;
+  }
+  strcpy(game_id->game_data->last_response, buffer);
+
   return buffer;
 }
 
-// function to handle guess word requests
 char* guess_word(char *message) {
   char code[4];
   char plid[7];
@@ -470,7 +508,7 @@ char* guess_word(char *message) {
     if (trial != game->trial){ 
       if (trial == game->trial-1 && game->guesses->word != NULL
        && strcmp(game->guesses->word, word) == 0){
-        return NULL; // RESEND LAST GUESS RESPONSE TODO
+        strcpy(buffer, game->last_response);
       }
       else{ // TRIAL NUMBER DOESNT MATCH -> INV
         strcpy(status, INV);
@@ -485,8 +523,16 @@ char* guess_word(char *message) {
     else{ 
       // add word to guessed_words and link them
       game->guesses->word = (char*) malloc((strlen(word)+1) * sizeof(char));
+      if (game->guesses->word == NULL) {
+        perror(ERR_MALLOC);
+        return NULL;
+      }
       strcpy(game->guesses->word, word);
       guessed_word *next_word = (guessed_word*) malloc(sizeof(guessed_word));
+      if (next_word == NULL) {
+        perror(ERR_MALLOC);
+        return NULL;
+      }
       next_word->word = NULL;
       next_word->prev = game->guesses;
       game->guesses = next_word;
@@ -495,10 +541,10 @@ char* guess_word(char *message) {
         strcpy(status, WIN);
         sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
 
-        game->letters_guessed = strlen(game->word); // TODO
+        game->letters_guessed = strlen(game->word);
         strcpy(game->word_status, game->word);
-        update_game_status(game_id, word, WIN);
-        store_game(game_id);
+        if (update_game_status(game_id, word, WIN) != 0 || store_game(game_id) != 0)
+          return NULL;
         delete_game(game_id);
       }
       else{
@@ -506,15 +552,16 @@ char* guess_word(char *message) {
 
         if (game->errors > game->max_errors){ // MAX ERRORS REACHED -> OVR
           strcpy(status, OVR);
-          update_game_status(game_id, word, OVR);
+          if (update_game_status(game_id, word, OVR) != 0 || store_game(game_id) != 0)
+            return NULL;
           sprintf(buffer, "%s %s %d\n", RWG, status, game->trial);
-          store_game(game_id);
           delete_game(game_id);
         }
         else{ // FAIL BUT NOT GAMEOVER
           strcpy(status, NOK);
           sprintf(buffer, "%s %s %d\n", RWG, status, game->trial++);
-          update_game_status(game_id, word, ACT);
+          if (update_game_status(game_id, word, ACT) != 0)
+            return NULL;
         }
       }
     }
@@ -523,16 +570,29 @@ char* guess_word(char *message) {
     strcpy(status, ERR);
     sprintf(buffer, "%s %s\n", RWG, status);
   }
+
+  // clear last response and save new one
+  free(game_id->game_data->last_response);
+  game_id->game_data->last_response = (char*) malloc(strlen(buffer) * sizeof(char));
+  if (game_id->game_data->last_response == NULL) {
+    perror(ERR_MALLOC);
+    return NULL;
+  }
+  strcpy(game_id->game_data->last_response, buffer);
+
   return buffer;
 }
 
-// function to handle quit requests
 char* quit(char *message) {
   char code[4];
   char plid[7];
   char status[4];
   char* buffer;
   buffer = (char*) malloc(256 * sizeof(char));
+  if (buffer == NULL) {
+    perror(ERR_MALLOC);
+    return NULL;
+  }
 
   sscanf(message, "%s %6s", code, plid);
 
@@ -564,8 +624,7 @@ char* quit(char *message) {
    --------------------------------------------------------------------------------------------------------------
  */
 
-// function to store game in scoreboard if score worthy
-void store_game(game_id *curr_game){
+int store_game(game_id *curr_game){
   char line[256];
   int trials = (curr_game->game_data->trial);
 
@@ -580,7 +639,7 @@ void store_game(game_id *curr_game){
 
   if (fp == NULL) {
     perror("fopen");
-    exit(1);
+    return 1;
   }
 
   flock(fileno(fp), LOCK_EX);
@@ -590,7 +649,9 @@ void store_game(game_id *curr_game){
   FILE* temp = fopen(temp_filename, "w"); // Create temporary auxiliary file
   if (temp == NULL) {
     perror("fopen");
-    exit(1);
+    flock(fileno(fp), LOCK_UN);
+    fclose(fp);
+    return 1;
   }
 
   int done = 0;
@@ -626,14 +687,19 @@ void store_game(game_id *curr_game){
   temp = fopen(temp_filename, "r");
   if (temp == NULL) {
     perror("fopen");
-    exit(1);
+    flock(fileno(fp), LOCK_UN);
+    fclose(fp);
+    return 1;
   }
   fclose(fp);
   
   fp = fopen(SCOREBOARD, "w");
   if (temp == NULL) {
     perror("fopen");
-    exit(1);
+    flock(fileno(fp), LOCK_UN);
+    fclose(temp);
+    remove(temp_filename);
+    return 1;
   }
 
   // Copy the lines from temp.txt to scoreboard.txt
@@ -645,9 +711,10 @@ void store_game(game_id *curr_game){
   fclose(temp);
 
   remove(temp_filename); // delete auxiliary file
+
+  return 0;
 }
 
-// Function to add a line to the scoreboard at the end of the file
 void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
 
   int trials = (curr_game->game_data->trial);
@@ -672,7 +739,6 @@ void add_scoreboard_line(FILE* fp, struct game_id *curr_game){
    --------------------------------------------------------------------------------------------------------------
  */
 
-// Function to set game data, returns the length of the word
 int set_game_data(game_id * game_id) {
   char word[31];
   char file[64];
@@ -683,7 +749,7 @@ int set_game_data(game_id * game_id) {
   FILE *fp = fopen(wordfile, "r");
   if (fp == NULL) {
     perror("fopen");
-    exit(1);
+    return 0;
   }
 
   // select word sequentially
@@ -709,14 +775,31 @@ int set_game_data(game_id * game_id) {
   word_length = strlen(word);
 
   game_data* game_data = (struct game_data*) malloc(sizeof(struct game_data));
+  if (game_data == NULL) {
+    perror("malloc");
+    return 0;
+  }
   game_id->game_data = game_data;
 
   // set game data
   game_data->word = malloc((word_length + 1) * sizeof(char));
+  if (game_data->word == NULL) {
+    perror("malloc");
+    return 0;
+  }
   game_data->file = malloc((strlen(file) + 1) * sizeof(char));
+  if (game_data->file == NULL) {
+    perror("malloc");
+    return 0;
+  }
   game_data->guesses = malloc(sizeof(guessed_word));
+  if (game_data->guesses == NULL) {
+    perror("malloc");
+    return 0;
+  }
   game_data->guesses->word = NULL;
   game_data->guesses->prev = NULL;
+  game_data->last_response = NULL;
 
   strcpy(game_data->word, word);
   strcpy(game_data->file, file);
@@ -743,7 +826,6 @@ int set_game_data(game_id * game_id) {
   return word_length;
 }
 
-// Function to get the game with the given plid
 game_id *get_game(char *plid) {
   game_id *curr_game = games[hash(plid)];
   while (curr_game != NULL) {
@@ -754,7 +836,6 @@ game_id *get_game(char *plid) {
   return NULL;
 }
 
-// Function which checks if letter has already been played
 int letter_in_word(char *letters_guessed, char *letter) {
   for (int i = 0; i < strlen(letters_guessed); i++) {
     if (letters_guessed[i] == letter[0])
@@ -763,13 +844,13 @@ int letter_in_word(char *letters_guessed, char *letter) {
   return 0;
 }
 
-// Function to delete a game
 void delete_game(game_id *game) {
 
   // Free everything in game_data
   if (game->game_data != NULL) {
     free(game->game_data->word);
     free(game->game_data->file);
+    free(game->game_data->last_response);
 
     guessed_word* curr_word = game->game_data->guesses;
     guessed_word* last_word = NULL;
@@ -786,7 +867,6 @@ void delete_game(game_id *game) {
   }
 }
 
-// Function which checks if word has already been played
 int word_played(char *word, guessed_word *guessed_words) {
 
   while (guessed_words != NULL) {
@@ -807,12 +887,12 @@ int word_played(char *word, guessed_word *guessed_words) {
    --------------------------------------------------------------------------------------------------------------
  */
 
-// function to update game status after each valid play made (letter or word)
-void update_game_status(game_id *game, char* attempt, char* status) {
+int update_game_status(game_id *game, char* attempt, char* status) {
   char filename[256];
   char st_filename[256];
 
-  check_gamesFolder();
+  if (check_gamesFolder() == 1)
+    return 1;
 
   sprintf(filename, GAMES, game->plid);
   sprintf(st_filename, GAMES_STATUS, game->plid);
@@ -821,7 +901,7 @@ void update_game_status(game_id *game, char* attempt, char* status) {
   FILE *fp = fopen(st_filename, "w");
   if (fp == NULL) {
     perror("fopen");
-    exit(1);
+    return 1;
   }
 
   fprintf(fp, "%s %s %s %s\n", status, game->game_data->word, 
@@ -832,7 +912,7 @@ void update_game_status(game_id *game, char* attempt, char* status) {
     fp = fopen(filename, "a");
     if (fp == NULL) {
       perror("fopen");
-      exit(1);
+      return 1;
     }
 
     if (strlen(attempt) == 1) // Letter trial
@@ -843,7 +923,7 @@ void update_game_status(game_id *game, char* attempt, char* status) {
     fp = fopen(filename, "w");
     if (fp == NULL) {
       perror("fopen");
-      exit(1);
+      return 1;
     }
   }
   fclose(fp);
@@ -858,7 +938,6 @@ void update_game_status(game_id *game, char* attempt, char* status) {
    --------------------------------------------------------------------------------------------------------------
  */
 
-// Function which handles TCP messages
 void message_tcp() {
   int fd, newfd, errcode;
   ssize_t n;
@@ -942,16 +1021,19 @@ void message_tcp() {
   freeaddrinfo(res);
 }
 
-// function to parse message received from client and call the correct function
 void parse_message_tcp(char *message, int fd){
   char code[4];
   char plid[7];
 
   sscanf(message, "%s", code);
+  char* response = (char*) malloc(9 * sizeof(char));
+  if (response == NULL){
+    perror("malloc");
+    return;
+  }
 
   if (strcmp(code, GSB) == 0){ // scoreboard
     if (clear_input(message) != 0){ // check if it is valid
-      char* response = (char*) malloc(9 * sizeof(char));
       sprintf(response, "%s %s\n", code, ERR);
       send_message_tcp(fd, response);
       free(response);
@@ -962,7 +1044,6 @@ void parse_message_tcp(char *message, int fd){
 
   else if(strcmp(code, GHL) == 0){ // hint
     if (clear_input(message) != 0){ // check if it is valid
-      char* response = (char*) malloc(9 * sizeof(char));
       sprintf(response, "%s %s\n", code, ERR);
       send_message_tcp(fd, response);
       free(response);
@@ -974,7 +1055,6 @@ void parse_message_tcp(char *message, int fd){
 
   else if(strcmp(code, STA) == 0){ //state
     if (clear_input(message) != 0){ // check if it is valid
-      char* response = (char*) malloc(9 * sizeof(char));
       sprintf(response, "%s %s\n", code, ERR);
       send_message_tcp(fd, response);
       free(response);
@@ -985,28 +1065,37 @@ void parse_message_tcp(char *message, int fd){
   }
 
   else{ // error
-    char* response = (char*) malloc(6 * sizeof(char));
     sprintf(response, "%s\n", ERR);
     send_message_tcp(fd, response);
     free(response);
   }
 }
 
-/* Function which writes to file in directory GAMES and file game_plid.txt 
-the current state of the game. */
 char* state(char* plid, int fd) {
   char filename[256]; // File with game history
   char st_filename[256]; // File with game status
   char trans_buffer[5024] = ""; // Temporary buffer for all the attempts taken
   char temp[256];
   char* reply = (char*)malloc(5024 * sizeof(char));
+  if (reply == NULL){
+    perror("malloc");
+    return NULL;
+  }
   char* file = (char*)malloc(5024 * sizeof(char));
+  if (file == NULL){
+    perror("malloc");
+    return NULL;
+  }
 
   if (verbose == 1){
     printf("Player %s requested game state\n", plid);
   }
 
-  check_gamesFolder();
+  if (check_gamesFolder() != 0) {
+    free(reply);
+    free(file);
+    return NULL;
+  }
 
   sprintf(st_filename, GAMES_STATUS, plid);
   // Check if file exists 
@@ -1017,7 +1106,9 @@ char* state(char* plid, int fd) {
   FILE *fp = fopen(st_filename, "r"); // Open file with game status
   if (fp == NULL) {
     perror(ERR_FOPEN);
-    exit(1);
+    free(reply);
+    free(file);
+    return NULL;
   }
 
   char game_status[6];
@@ -1026,7 +1117,9 @@ char* state(char* plid, int fd) {
   char word_status[31];
   if (fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status) == EOF) {
     perror(ERR_FSCANF);
-    exit(1);
+    free(reply);
+    free(file);
+    return NULL;
   }
   fclose(fp);
 
@@ -1037,7 +1130,9 @@ char* state(char* plid, int fd) {
   fp = fopen(filename, "r"); // Open file with plays
   if (fp == NULL) {
     perror(ERR_FOPEN);
-    exit(1);
+    free(reply);
+    free(file);
+    return NULL;
   } 
 
   int trials = 0;
@@ -1086,7 +1181,6 @@ char* state(char* plid, int fd) {
   fclose(fp);
 }
 
-// function that sents the hint to the player
 void get_hint(int fd, char* plid){
   char status[4];
   char st_filename[64];
@@ -1096,14 +1190,15 @@ void get_hint(int fd, char* plid){
     printf("Player %s requested hint\n", plid);
   }
 
-  check_gamesFolder();
+  if (check_gamesFolder() != 0)
+    return;
 
   sprintf(st_filename, GAMES_STATUS, plid);
 
   FILE *fp = fopen(st_filename, "r"); // Open file with game status
   if (fp == NULL) {
     perror(ERR_FOPEN);
-    exit(1);
+    return;
   }
 
   char game_status[6];
@@ -1112,24 +1207,35 @@ void get_hint(int fd, char* plid){
   char word_status[31];
   if (fscanf(fp, "%s %s %s %s", game_status, word, word_file, word_status) == EOF) {
     perror(ERR_FSCANF);
-    exit(1);
+    fclose(fp);
+    return;
   }
   fclose(fp);
 
   // get file with word_file name
 
   char *filename = (char*) malloc(strlen(WORDS) + strlen(word_file) + 1);
+  if (filename == NULL){
+    perror("malloc");
+    return;
+  }
   sprintf(filename, "%s%s", WORDS, word_file);
 
-  fp = fopen(filename, "r");
   if (access(filename, F_OK) == -1 || access(filename, R_OK) == -1) {
     puts(ERR_FILE_DNE);
     reply = (char*)malloc(strlen(RHL) + 1 + strlen(NOK) + 2);
+    if (reply == NULL){
+      perror("malloc");
+      free(filename);
+      return;
+    }
     sprintf(reply, "%s %s\n", RHL, NOK);
     send_message_tcp(fd, reply);
+    free(filename);
     free(reply);
     return;
   }
+  fp = fopen(filename, "r");
 
   // get filename size
   fseek(fp, 0, SEEK_END);
@@ -1140,14 +1246,29 @@ void get_hint(int fd, char* plid){
 
   // get file content
   char *file = (char*)malloc(fsize + 1);
+  if (file == NULL){
+    perror("malloc");
+    free(filename);
+    fclose(fp);
+    return;
+  }
   if (fread(file, fsize, 1, fp) < 1) {
     perror(ERR_FREAD);
-    exit(1);
+    free(filename);
+    free(file);
+    fclose(fp);
+    return;
   }
 
   fclose(fp);
 
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(word_file) + fsize +5);
+  if (reply == NULL){
+    perror("malloc");
+    free(filename);
+    free(file);
+    return;
+  }
   sprintf(reply, "%s %s %s %ld ", RHL, OK, word_file, fsize);
 
   //send message
@@ -1160,10 +1281,13 @@ void get_hint(int fd, char* plid){
   free(filename);
 }
 
-// get scoreboard
 void get_scoreboard(int fd){
   char *reply;
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
+  if (filename == NULL){
+    perror("malloc");
+    return;
+  }
 
   if (verbose == 1)
     puts(SB_REQUEST);
@@ -1182,17 +1306,25 @@ void get_scoreboard(int fd){
     fsize = ftell(fp);
     // go back to the beginning of the file
     fseek(fp, 0, SEEK_SET);
-  } // TODO : if R_OK is false, send NOK??
+  }
 
   if (fsize == 0) { // if file is empty or doesn't exist
     if (verbose == 1) {
         puts("--------------------"); // just to separate the messages
     } // for some reason it wasn't printing where it should so we bruteforced it here
     reply = (char*)malloc(strlen(RSB) + strlen(EMPTY) + 3);
+    if (reply == NULL){
+      perror("malloc");
+      free(filename);
+      flock(fileno(fp), LOCK_UN);
+      fclose(fp);
+      return;
+    }
     sprintf(reply, "%s %s\n", RSB, EMPTY);
     send_message_tcp(fd, reply);
     free(filename);
     free(reply);
+    flock(fileno(fp), LOCK_UN);
     fclose(fp);
     return;
   }
@@ -1220,12 +1352,28 @@ void get_scoreboard(int fd){
 
   // get file content
   char *file = (char*)malloc(fsize + 1);
+  if (file == NULL){
+    perror("malloc");
+    free(filename);
+    fclose(fp);
+    return;
+  }
   if (fread(file, fsize, 1, temp) < 1) {
     perror(ERR_FREAD);
-    exit(1);
+    free(filename);
+    free(file);
+    fclose(fp);
+    return;
   }
 
   reply = (char*)malloc(strlen(RHL) + strlen(OK) + strlen(filename) + fsize + 2);
+  if (reply == NULL){
+    perror("malloc");
+    free(filename);
+    free(file);
+    fclose(fp);
+    return;
+  }
   sprintf(reply, "%s %s %s %ld ", RSB, OK, filename, fsize);
 
   //send message
@@ -1250,7 +1398,6 @@ void get_scoreboard(int fd){
    --------------------------------------------------------------------------------------------------------------
  */
 
-// function to send a message only in tcp
 void send_message_tcp(int fd, char* message){
   ssize_t n = write(fd, message, strlen(message));
   while (n < strlen(message)) {
@@ -1258,7 +1405,6 @@ void send_message_tcp(int fd, char* message){
   }
 }
 
-// function to send a file only in tcp
 void send_file(int fd, char* file, int fsize){
   ssize_t n = write(fd, file, fsize);
   while (n < fsize) {
@@ -1266,7 +1412,6 @@ void send_file(int fd, char* file, int fsize){
   }
 }
 
-// function to handle signals
 static void handler(int signum) {
   switch (signum) {
   case SIGINT:
@@ -1281,8 +1426,7 @@ static void handler(int signum) {
   }
 }
 
-// check if game folder exists, if not create it
-void check_gamesFolder(){
+int check_gamesFolder(){
   DIR *dir = opendir(GAMES_DIR);
   if (dir) {
     closedir(dir);
@@ -1290,11 +1434,11 @@ void check_gamesFolder(){
     mkdir(GAMES_DIR, 0700);
   } else {
     perror(ERR_OPENDIR);
-    exit(1);
+    return 1;
   }
+  return 0;
 }
 
-// Verifies request follows protocol and is valid
 int clear_input(char *message) {
   // 0 = clear input
   // 1 = error
@@ -1349,7 +1493,6 @@ int clear_input(char *message) {
   return 0;
 }
 
-//check if is a word
 int is_word(char* buf) {
   int i = 0;
   for (i = 0; i < strlen(buf); i++) {
@@ -1363,7 +1506,6 @@ int is_word(char* buf) {
   return 1;
 }
 
-// check if is a number
 int is_number(char* buf) {
   int i = 0;
   for (i = 0; i < strlen(buf); i++) {
@@ -1376,7 +1518,6 @@ int is_number(char* buf) {
   return 1;
 }
 
-// check if filename is valid
 int check_filename(char* filename) {
   char buffer[25] = "";
   int ext = 0;
@@ -1387,10 +1528,3 @@ int check_filename(char* filename) {
   }
   return 1;
 }
-
-// TODO clean up code
-// TODO Comments here and in header files
-// TODO format everything nicely with clang
-// TODO make single makefile in project root folder
-// TODO move these functions to a shared file between client and server
-// TODO rever timeouts e etc
