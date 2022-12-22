@@ -5,7 +5,7 @@ DEPS= GS.h
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-client: GS.c GS.o
+GS: GS.c GS.o
 	$(CC) -o GS GS.o
 
 .PHONY: clean

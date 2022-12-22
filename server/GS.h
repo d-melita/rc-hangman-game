@@ -29,7 +29,7 @@
 #define SIZE_WORDFILE 10
 #define DEFAULT_TABLE_SIZE 15625 // max 64 collisions, 125kb
 #define MAX_TABLE_SIZE 1000000 // no collisions, 8mb
-#define TIMEOUT 10 // seconds
+#define TIMEOUT 5 // seconds
 
 // CODES
 #define SNG "SNG"
@@ -194,8 +194,8 @@ char* quit(char *message);
 ///
 /// \param game_id game id struct of the game
 ///
-/// \return void
-void store_game(struct game_id* game_id);
+/// \return 0 if successful, 1 otherwise
+int store_game(struct game_id* game_id);
 
 /// Attempt to add a new game record to scoreboard.
 ///
@@ -251,8 +251,8 @@ int word_played(char* word, struct guessed_word* guessed_words);
 /// \param attempt attempt made by player (letter or word)
 /// \param status status of attempt (OK, WIN, OVR)
 ///
-/// \return void
-void update_game_status(struct game_id *game, char* attempt, char* status);
+/// \return 0 on success, 1 otherwise
+int update_game_status(struct game_id *game, char* attempt, char* status);
 
 // TCP functions //////////////////////////////////////////////////////////
 
