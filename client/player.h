@@ -72,6 +72,8 @@
 #define WELL_DONE "WELL DONE! YOU GUESSED: %s\n"
 #define FILE_RECEIVED "File %s received (%d bytes) in current directory.\n"
 #define WARN_EMPTY_SB "Scoreboard is empty\n"
+#define NEW_GAME_MSG "New game started (max %d errors): %s (word length: %d)\n", \
+  current_game.max_errors, current_game.word, current_game.length
 
 // Buffer sizes
 
@@ -140,26 +142,122 @@
 #define IGNORING_SIGNAL "\nIgnoring unexpected signal...\n"
 
 // Function prototypes
+
+// Parse arguments from argv
 void parse_args(int argc, char *argv[]);
+
+/// Get IP from localhost. (-n option not used)
+///
+/// \returns void
 void get_ip();
+
+/// Get IP from given host.
+///
+/// \param host Hostname to get IP from.
+/// \returns void
 void get_ip_known_host(char *host);
+
+/// Function to start command from player, sending the request to the server.
+///
+/// \returns void
 void start_function();
+
+/// Function to play command from player, sending the request to the server.
+///
+/// \returns void
 void play_function();
+
+/// Function to guess command from player, sending the request to the server.
+///
+/// \returns void
 void guess_function();
+
+/// Function to hint command from player, sending the request to the server.
+///
+/// \returns void
 void hint_function();
+
+/// Function to state command from player, sending the request to the server.
+///
+/// \returns void
 void state_function();
+
+/// Function to scoreboard command from player, sending the request to the server.
+///
+/// \returns void
 void scoreboard_function();
+
+/// Function to quit command from player, sending the request to the server.
+///
+/// \returns void
 void quit_function();
 
+/// Send a UDP message to the server.
+///
+/// \param buffer message to send
+///
+/// \returns void
 void message_udp(char *buffer);
+
+/// Parse server response to a UDP message, calling the appropriate
+/// function to handle the response.
+///
+/// \param message response from server
+///
+/// \returns void
 void parse_response_udp(char *message);
+
+/// Parse server response to a new game request, setting the new game
+/// state accordingly.
+///
+/// \param message response from server
+///
+/// \returns void
 void set_new_game(char *message);
+
+/// Parse the response from the server to a correct 'PLG' message,
+/// updating the game's state accordingly. Calls parse_message_play.
+///
+/// \param message response from server
+///
+/// \returns void
 void play_made(char *message);
+
+/// Parse the response from the server to a correct 'PLG' message,
+/// getting the played letter's positions.
+///
+/// \param message response from server
+/// \param pos array to store the positions of the letter
+///
+/// \returns void
 void parse_message_play(char *message, int pos[]);
+
+/// Server has declared the play to be correct and to have
+/// completed the game. This function completes the progress
+/// of the game and prints a congratulatory message.
+///
+/// \returns void
 void win_function();
+
+/// Server has declared the guess to be correct.
+/// This function completes the progress of the game and
+/// prints a congratulatory message.
+///
+/// \returns void
 void win_word_function();
 
+/// Send message to server via TCP.
+///
+/// \param buffer message to be sent
+///
+/// \returns void
 void message_tcp(char *buffer);
+
+/// Parse TCP response from server.
+///
+/// \param fd file descriptor to be read (TCP socket)
+///
+/// \returns void
 void parse_response_tcp(int fd);
 
 /// Read unknown length string from socket to buffer,
@@ -173,12 +271,11 @@ void parse_response_tcp(int fd);
 /// \returns 0 on success
 int read_buffer2string(int fd, char *string);
 
-/// Receive file from socket, saving it locally.
+/// Receive file from socket, saving it locally and optionally
+/// printing it to stdout.
 ///
 /// \param fd file descriptor to be read (socket)
-/// \param code response code
-/// \param status response status
-/// \param response response message (with file)
+/// \param toPrint flag to print file to stdout
 ///
 /// \returns void
 void get_file(int fd, int toPrint);
@@ -191,12 +288,30 @@ static void handler(int signum);
 
 /// Function to clear stdin.
 ///
-/// \returns 1 if any characters other than spaces or tabulations
-/// are found, 0 otherwise
+/// \returns 1 if any characters are found until a newline is found, 0 otherwise
 int clear_input();
 
+/// Verify content in buffer is made up only of alphabetic characters.
+///
+/// \param buffer buffer
+///
+/// \returns 1 if buffer is made up only of alphabetic characters, 0 otherwise
 int is_word(char* buf);
+
+/// Verify content in buffer is made up only of numeric characters.
+///
+/// \param buffer buffer
+///
+/// \returns 1 if buffer is made up only of numeric characters, 0 otherwise
 int is_number(char* buf);
+
+/// Read input from stdin. Stops reading when a whitespace is found,
+/// if a newline is found, it is returned to stdin.
+///
+/// \param buffer buffer to store parsed input
+/// \param size how many bytes to parse
+///
+/// \returns number of bytes read
 int read_input(char* buffer, int size);
 
 #endif

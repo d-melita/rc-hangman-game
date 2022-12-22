@@ -5,28 +5,29 @@ char port[6];
 char plid[7] = "";
 int game_ongoing = 0;
 
+/* Struct to store the current game state. */
 struct current_game {
-  int trial;
-  char word[31];
-  int length;
-  int errors;
-  int max_errors;
-  char last_letter[2];
-  char word_guessed[31];
+  int trial; // number of trials
+  char word[31]; // word progress so far
+  int length; // length of word
+  int errors; // number of errors
+  int max_errors; // maximum number of errors
+  char last_letter[2]; // last letter played
+  char word_guessed[31]; // last word guessed (guess attempt)
 };
 
 struct current_game current_game;
 
 int main(int argc, char *argv[]) {
   signal(SIGPIPE, handler); // Ignore SIGPIPE (broken pipe)
-  signal(SIGINT, handler);
+  signal(SIGINT, handler); // Handle SIGINT (Ctrl+C)
 
   int n;
   char command[20];
 
   parse_args(argc, argv);
 
-  if (read_input(command, 20) != 0)
+  if (read_input(command, 20) != 0) // Get first input
     exit(1);
 
   while (strcmp(command, EXIT) != 0) {
@@ -66,7 +67,7 @@ int main(int argc, char *argv[]) {
       while (getchar() != '\n');
     }
 
-    if (read_input(command, 20) != 0)
+    if (read_input(command, 20) != 0) // Get next input
       exit(1);
   }
 
@@ -76,27 +77,31 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-// Parse the arguments given to the program (host and port)
 void parse_args(int argc, char *argv[]) {
-  // Two arguments, -n and -p
+  // Two arguments, -n and -p, can only be used once
+  int n = 0;
+  int p = 0;
+
   strcpy(port, DEFAULT_PORT);
   get_ip(); // get ip of current machine
 
   for (int i = 1; i < argc; i++) { // Parse each given option and argument
 
-    if (strcmp(argv[i], "-n") == 0) { // Host option (-n)
+    if (strcmp(argv[i], "-n") == 0 && n == 0) { // Host option (-n)
       if (i - 1 < argc) {
         get_ip_known_host(argv[++i]);
         strcpy(port, DEFAULT_PORT);
+        n++;
       } else {
         printf(ERR_MISSING_ARGUMENT, argv[i]);
         exit(1);
       }
 
-    } else if (strcmp(argv[i], "-p") == 0) { // Port option (-p)
-      if (i - 1 < argc)
+    } else if (strcmp(argv[i], "-p") == 0 && p == 0) { // Port option (-p)
+      if (i - 1 < argc) {
         strcpy(port, argv[++i]);
-      else {
+        p++;
+      } else {
         printf(ERR_MISSING_ARGUMENT, argv[i]);
         exit(1);
       }
@@ -108,7 +113,6 @@ void parse_args(int argc, char *argv[]) {
   }
 }
 
-// Get the ip of current machine when '-n' not specified
 void get_ip() {
   char host[256];
   int hostname;
@@ -122,7 +126,6 @@ void get_ip() {
   get_ip_known_host(host);
 }
 
-// Get the ip of host when '-n' specified.
 void get_ip_known_host(char *host) {
   struct addrinfo hints, *res, *p;
   int errcode;
@@ -147,7 +150,6 @@ void get_ip_known_host(char *host) {
   }
 }
 
-// Send start message to server.
 void start_function() {
   int n;
   char t_plid[7];
@@ -180,7 +182,6 @@ void start_function() {
   message_udp(message);
 }
 
-// Send play message to server.
 void play_function() {
   int n;
   char *message;
@@ -191,14 +192,16 @@ void play_function() {
   message = malloc(13 + strlen(trial_str) + 2);
   // 13 (PLG + plid + space) + strlen(trial_str) + 2 (\0 + \n)
 
+  // Get letter
   if (read_input(letter, 2) != 0) {
     puts(ERR_INPUT);
     exit(1);
   }
   letter[0] = toupper(letter[0]);
 
-  if (clear_input() == 1 || strlen(letter) != 1 ||
-      is_word(letter) == 0) {
+  // Verify validity of input and theres no tailing characters
+  if (clear_input() == 1 || strlen(letter) != 1 
+   || is_word(letter) == 0) {
     puts(ERR_INVALID_ARGS);
     free(message);
     return;
@@ -218,7 +221,6 @@ void play_function() {
   free(message);
 }
 
-// Send guess message to server.
 void guess_function() {
   int n;
   char *message;
@@ -227,10 +229,13 @@ void guess_function() {
 
   sprintf(trial_str, "%d", current_game.trial);
 
+  // Get word
   if (read_input(guess, 31) != 0) {
     puts(ERR_INPUT);
     exit(1);
   }
+
+  // Verify validity of input and theres no tailing characters
   if (clear_input() == 1 || strlen(guess) < 3 || is_word(guess) == 0) {
     puts(ERR_INVALID_ARGS);
     return;
@@ -247,6 +252,7 @@ void guess_function() {
   }
 
   message = malloc(13 + strlen(current_game.word_guessed) + strlen(trial_str) + 2);
+  // 13 (PWG + plid + space) + strlen(word_guessed) + strlen(trial_str) + 2 (\0 + \n)
 
   sprintf(message, "%s %s %s %d\n", PWG, plid, current_game.word_guessed,
           current_game.trial);
@@ -256,6 +262,7 @@ void guess_function() {
 }
 
 void scoreboard_function() { 
+  // Verify theres no tailing characters
   if (clear_input() == 1) {
     puts(ERR_INVALID_ARGS);
     return;
@@ -267,6 +274,7 @@ void scoreboard_function() {
 void hint_function() {
   char message[12];
 
+  // Verify theres no tailing characters
   if (clear_input() == 1) {
     puts(ERR_INVALID_ARGS);
     return;
@@ -284,11 +292,13 @@ void hint_function() {
 void state_function() {
   char message[12];
 
+  // Verify theres no tailing characters
   if (clear_input() == 1) {
     puts(ERR_INVALID_ARGS);
     return;
   }
 
+  // Verify a game has been started since client start
   if (strcmp(plid, "") == 0) {
     printf(ERR_NO_PLID);
     return;
@@ -298,21 +308,14 @@ void state_function() {
   message_tcp(message);
 }
 
-// Notify the server to quit the current game.
 void quit_function() {
   char message[12];
 
+  // Verify theres no tailing characters
   if (clear_input() == 1) {
     puts(ERR_INVALID_ARGS);
     return;
   }
-
-  // This would make it impossible to quit games not started
-  // on the current instance.
-  // if (game_ongoing == 0) {
-  //   printf(ERR_NO_GAME);
-  //   return;
-  // }
 
   sprintf(message, "%s %s\n", QUT, plid);
   message_udp(message);
@@ -336,7 +339,6 @@ void message_udp(char *buffer) {
   struct sockaddr_in addr;
   char response[128];
 
-
   fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
   if (fd == -1) {
     perror(ERR_SOCKET);
@@ -355,12 +357,13 @@ void message_udp(char *buffer) {
   }
 
   n = sendto(fd, buffer, strlen(buffer), 0, res->ai_addr, res->ai_addrlen);
-  if (n == -1) {  // CHECK IF CONNECTION DROPPED LOCALLY OR ETC
+  if (n == -1) {  // CHECK IF CONNECTION DROPPED OR ETC
     perror(ERR_SENDTO);
     puts(ERR_CONNECTION);
     return;
   }
 
+  // Set connection timeout between server and client of 'TIMEOUT' seconds
   struct timeval tv = {TIMEOUT, 0};
   if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv) < 0) {
     if (errno == ETIMEDOUT) {
@@ -374,7 +377,7 @@ void message_udp(char *buffer) {
 
   addrlen = sizeof(addr);
   n = recvfrom(fd, response, 128, 0, (struct sockaddr *)&addr, &addrlen);
-  if (n == -1) {  // CHECK IF CONNECTION DROPPED LOCALLY OR ETC
+  if (n == -1) {  // CHECK IF CONNECTION DROPPED OR ETC
     perror(ERR_RECVFROM);
     puts(ERR_CONNECTION);
     return;
@@ -387,7 +390,6 @@ void message_udp(char *buffer) {
   close(fd);
 }
 
-// function to parse server response
 void parse_response_udp(char *message) {
   char code[4];
   char status[4];
@@ -396,6 +398,7 @@ void parse_response_udp(char *message) {
   // scan the message and get the code and status
   sscanf(message, "%s %s", code, status);
 
+  // Start game reply
   if (strcmp(code, RSG) == 0) {
     if (strcmp(status, OK) == 0) {
       set_new_game(message);
@@ -404,10 +407,10 @@ void parse_response_udp(char *message) {
     }
   }
 
+  // Play letter reply
   else if (strcmp(code, RLG) == 0) {
     if (strcmp(status, OK) == 0) {
       play_made(message);
-      // increment trial
       current_game.trial++;
     } else if (strcmp(status, NOK) == 0) {
       current_game.errors++;
@@ -419,12 +422,12 @@ void parse_response_udp(char *message) {
 
     else if (strcmp(status, WIN) == 0) {
       win_function();
-      game_ongoing = 0;
+      game_ongoing = 0; // Reset game_ongoing
     }
 
     else if (strcmp(status, OVR) == 0) {
       current_game.errors++;
-      game_ongoing = 0;
+      game_ongoing = 0; // Reset game_ongoing
       printf(ERR_WRONG_CHAR_GAMEOVER);
     }
 
@@ -437,6 +440,7 @@ void parse_response_udp(char *message) {
     }
   }
 
+  // Guess word reply
   else if (strcmp(code, RWG) == 0) {
     if (strcmp(status, NOK) == 0) {
       current_game.errors++;
@@ -464,6 +468,7 @@ void parse_response_udp(char *message) {
     }
   }
 
+  // Quit game reply
   else if (strcmp(code, RQT) == 0) {
     if (strcmp(status, OK) == 0) {
       printf(GAME_OVER);
@@ -472,6 +477,7 @@ void parse_response_udp(char *message) {
     }
   }
 
+  // REV reply
   else if (strcmp(code, RVV) == 0) {
     printf("%s\n", status); // only using during devolopment to display the word
                             // to bue guessed
@@ -496,7 +502,6 @@ void parse_response_udp(char *message) {
   }
 }
 
-// function to set a new game
 void set_new_game(char *message) {
   char code[4];
   char status[4];
@@ -505,7 +510,7 @@ void set_new_game(char *message) {
   sscanf(message, "%s %s %d %d", code, status, &current_game.length,
          &current_game.max_errors);
   word = (char *)malloc((current_game.length + 1) * sizeof(char));
-  for (int i = 0; i < current_game.length; i++) {
+  for (int i = 0; i < current_game.length; i++) { // Set game progress to ----
     word[i] = '-';
   }
   word[current_game.length] = '\0';
@@ -517,16 +522,15 @@ void set_new_game(char *message) {
   current_game.trial = 1;
   strcpy(current_game.last_letter, "");
   game_ongoing = 1;
-  printf("New game started (max %d errors): %s (word length: %d)\n",
-         current_game.max_errors, current_game.word, current_game.length);
+  printf(NEW_GAME_MSG);
 }
 
-// function to know which positions to change in the word
 void parse_message_play(char *message, int pos[]) {
   char c;
   int ne = 0; // nb of white spaces
   int i = 0;
   int j, index = 0;
+  // Skip the beginning of the message (until 4 spaces are found)
   for (i; i < strlen(message); i++) {
     if (message[i] == ' ') {
       ne++;
@@ -535,6 +539,7 @@ void parse_message_play(char *message, int pos[]) {
       break;
     }
   }
+  // Read the positions of guessed letter in word
   for (j = i; j < strlen(message); j++) {
     if (message[j] != ' ') {
       if (message[j + 1] == ' ' || message[j + 1] == '\n') {
@@ -548,7 +553,6 @@ void parse_message_play(char *message, int pos[]) {
   }
 }
 
-// function to show the play made
 void play_made(char *message) {
   int n; // number of positions where the letter appears
   char code[4];
@@ -557,6 +561,7 @@ void play_made(char *message) {
   sscanf(message, "%s %s %d %d", code, status, &current_game.trial, &n);
   int pos[n];
 
+  // Get the positions of played letter to 'pos' array
   parse_message_play(message, pos);
 
   for (int i = 0; i < n; i++) {
@@ -593,12 +598,12 @@ int read_buffer2string(int fd, char *string) {
   int n;
   char *buffer = (char *)malloc(256 * sizeof(char));
 
-  int bytes = 0;
-  n = read(fd, buffer + bytes, 1);
+  int bytes = 0; // number of bytes read
+  n = read(fd, buffer + bytes, 1); // read from socket (byte by byte)
   if (n <= 0) {
     puts(ERR_READ);
     exit(1);
-  }
+  } // until space or newline is found
   while ((buffer[bytes] != ' ') && (buffer[bytes] != '\n')) {
     bytes++;
     n = read(fd, buffer + bytes, 1);
@@ -659,7 +664,7 @@ void get_file(int fd, int toPrint) {
   fclose(fp);
 
   printf(FILE_RECEIVED, filename, filesize);
-  if (toPrint == 1) {
+  if (toPrint == 1) { // print file content
     char buffer[256];
     fp = fopen(filename, "r");
     puts("----------vFILEv-----------");
@@ -792,7 +797,7 @@ int clear_input() {
   int ret = 0;
 
   while ((c = getchar()) != '\n') {
-    // if (c != ' ' && c != '\t') // No spaces at all!!
+    // if (c != ' ' && c != '\t') //^ No tailing at all!!
       ret = 1;
   }
   return ret;
