@@ -1,6 +1,6 @@
 #!/bin/sh
 
-MY_IP="94.63.108.2"
+MY_IP="curl -s ifconfig.me"
 TEJO="nc tejo.tecnico.ulisboa.pt 59000"
 
 RED='\033[0;31m'
@@ -8,7 +8,7 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 function run_server() {
-  server/GS server/word_eng.txt -p 50400 -v > tests/tmp/server.log
+  server/GS server/words.txt -p 50400 -v > tests/tmp/server.log
 }
 
 function run_command() {
