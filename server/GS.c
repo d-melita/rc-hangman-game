@@ -114,8 +114,7 @@ int set_game(char* plid) {
   return 0;
 }
 
-// function to resize table of games
-int resize_table() { // TODO TEST IF WORKS
+int resize_table() {
   game_id** new_table = malloc(sizeof(game_id*) * table_size * 2);
   if (new_table == NULL) {
     perror(ERR_MALLOC);
@@ -126,7 +125,7 @@ int resize_table() { // TODO TEST IF WORKS
   int old_size = table_size;
   table_size *= 2;
   for (int i = 0; i < old_size; i++) {
-    game_id* curr = games[i]; // TODO
+    game_id* curr = games[i];
     game_id* prev = NULL;
     while (curr != NULL) {
       int new_hash = hash(curr->plid);
@@ -143,7 +142,6 @@ int resize_table() { // TODO TEST IF WORKS
   return 0;
 }
 
-// function to delete table of games
 int delete_table() {
   for (int i = 0; i < table_size; i++) {
     game_id* curr = games[i];
@@ -239,7 +237,7 @@ void message_udp() {
     n = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&addr, &addrlen);
     if (n == -1) {
       perror(ERR_RECVFROM);
-      exit(1);
+      continue;
     }
 
     buf[n] = '\0';
@@ -254,7 +252,8 @@ void message_udp() {
       n = sendto(fd, response, strlen(response), 0, (struct sockaddr *)&addr, addrlen);
       if (n == -1) {
         perror(ERR_SENDTO);
-        exit(1);
+        free(response);
+        continue;
       }
       
       if (verbose == 1) {
@@ -300,7 +299,6 @@ char* parse_message_udp(char *message) {
   }
 }
 
-// function to start a new game
 char* start_new_game(char *message) {
   char code[4];
   char plid[7];
@@ -322,7 +320,7 @@ char* start_new_game(char *message) {
   game_id *curr_game = get_game(plid);  
   if (curr_game == NULL || curr_game->game_data == NULL) { // PLAYER HAS NO ONGOING GAME
     if (set_game(plid) != 0)
-      exit(1);
+      return NULL;
 
     curr_game = get_game(plid);
     word_length = strlen(curr_game->game_data->word);
@@ -754,7 +752,6 @@ game_id *get_game(char *plid) {
   return NULL;
 }
 
-// Function which checks if letter has already been played
 int letter_in_word(char *letters_guessed, char *letter) {
   for (int i = 0; i < strlen(letters_guessed); i++) {
     if (letters_guessed[i] == letter[0])
@@ -807,12 +804,12 @@ int word_played(char *word, guessed_word *guessed_words) {
    --------------------------------------------------------------------------------------------------------------
  */
 
-// function to update game status after each valid play made (letter or word)
 void update_game_status(game_id *game, char* attempt, char* status) {
   char filename[256];
   char st_filename[256];
 
-  check_gamesFolder();
+  if (check_gamesFolder() == 1)
+    return;
 
   sprintf(filename, GAMES, game->plid);
   sprintf(st_filename, GAMES_STATUS, game->plid);
@@ -858,7 +855,6 @@ void update_game_status(game_id *game, char* attempt, char* status) {
    --------------------------------------------------------------------------------------------------------------
  */
 
-// Function which handles TCP messages
 void message_tcp() {
   int fd, newfd, errcode;
   ssize_t n;
@@ -1160,7 +1156,6 @@ void get_hint(int fd, char* plid){
   free(filename);
 }
 
-// get scoreboard
 void get_scoreboard(int fd){
   char *reply;
   char *filename = (char*) malloc(strlen(SCOREBOARD) + 1);
@@ -1266,7 +1261,6 @@ void send_file(int fd, char* file, int fsize){
   }
 }
 
-// function to handle signals
 static void handler(int signum) {
   switch (signum) {
   case SIGINT:
@@ -1282,7 +1276,7 @@ static void handler(int signum) {
 }
 
 // check if game folder exists, if not create it
-void check_gamesFolder(){
+int check_gamesFolder(){
   DIR *dir = opendir(GAMES_DIR);
   if (dir) {
     closedir(dir);
@@ -1290,11 +1284,11 @@ void check_gamesFolder(){
     mkdir(GAMES_DIR, 0700);
   } else {
     perror(ERR_OPENDIR);
-    exit(1);
+    return 1;
   }
+  return 0;
 }
 
-// Verifies request follows protocol and is valid
 int clear_input(char *message) {
   // 0 = clear input
   // 1 = error
@@ -1349,7 +1343,6 @@ int clear_input(char *message) {
   return 0;
 }
 
-//check if is a word
 int is_word(char* buf) {
   int i = 0;
   for (i = 0; i < strlen(buf); i++) {
@@ -1363,7 +1356,6 @@ int is_word(char* buf) {
   return 1;
 }
 
-// check if is a number
 int is_number(char* buf) {
   int i = 0;
   for (i = 0; i < strlen(buf); i++) {
@@ -1387,10 +1379,3 @@ int check_filename(char* filename) {
   }
   return 1;
 }
-
-// TODO clean up code
-// TODO Comments here and in header files
-// TODO format everything nicely with clang
-// TODO make single makefile in project root folder
-// TODO move these functions to a shared file between client and server
-// TODO rever timeouts e etc

@@ -135,6 +135,7 @@
 #define ERR_SELECT_SOCKET "Error in select_socket function, unknown value for readWrite argument\n"
 #define ERR_SELECT_RETURNED "ERROR: select returned %d\n"
 #define ERR_INPUT "ERROR: Failed to read input from sdtin"
+#define ERR_FILESIZE "ERROR: File size is too big\n"
 
 // SIGNAL MESSAGES
 #define CLOSING_SIGNAL "\nClosing Signal Received...\n"
@@ -147,80 +148,55 @@
 void parse_args(int argc, char *argv[]);
 
 /// Get IP from localhost. (-n option not used)
-///
-/// \returns void
 void get_ip();
 
 /// Get IP from given host.
 ///
 /// \param host Hostname to get IP from.
-/// \returns void
 void get_ip_known_host(char *host);
 
 /// Function to start command from player, sending the request to the server.
-///
-/// \returns void
 void start_function();
 
 /// Function to play command from player, sending the request to the server.
-///
-/// \returns void
 void play_function();
 
 /// Function to guess command from player, sending the request to the server.
-///
-/// \returns void
 void guess_function();
 
 /// Function to hint command from player, sending the request to the server.
-///
-/// \returns void
 void hint_function();
 
 /// Function to state command from player, sending the request to the server.
-///
-/// \returns void
 void state_function();
 
 /// Function to scoreboard command from player, sending the request to the server.
-///
-/// \returns void
 void scoreboard_function();
 
 /// Function to quit command from player, sending the request to the server.
-///
-/// \returns void
 void quit_function();
 
 /// Send a UDP message to the server.
 ///
 /// \param buffer message to send
-///
-/// \returns void
 void message_udp(char *buffer);
 
 /// Parse server response to a UDP message, calling the appropriate
 /// function to handle the response.
 ///
 /// \param message response from server
-///
-/// \returns void
 void parse_response_udp(char *message);
 
 /// Parse server response to a new game request, setting the new game
 /// state accordingly.
 ///
 /// \param message response from server
-///
-/// \returns void
 void set_new_game(char *message);
 
 /// Parse the response from the server to a correct 'PLG' message,
 /// updating the game's state accordingly. Calls parse_message_play.
 ///
 /// \param message response from server
-///
-/// \returns void
 void play_made(char *message);
 
 /// Parse the response from the server to a correct 'PLG' message,
@@ -228,36 +204,26 @@ void play_made(char *message);
 ///
 /// \param message response from server
 /// \param pos array to store the positions of the letter
-///
-/// \returns void
 void parse_message_play(char *message, int pos[]);
 
 /// Server has declared the play to be correct and to have
 /// completed the game. This function completes the progress
 /// of the game and prints a congratulatory message.
-///
-/// \returns void
 void win_function();
 
 /// Server has declared the guess to be correct.
 /// This function completes the progress of the game and
 /// prints a congratulatory message.
-///
-/// \returns void
 void win_word_function();
 
 /// Send message to server via TCP.
 ///
 /// \param buffer message to be sent
-///
-/// \returns void
 void message_tcp(char *buffer);
 
 /// Parse TCP response from server.
 ///
 /// \param fd file descriptor to be read (TCP socket)
-///
-/// \returns void
 void parse_response_tcp(int fd);
 
 /// Read unknown length string from socket to buffer,
@@ -276,15 +242,17 @@ int read_buffer2string(int fd, char *string);
 ///
 /// \param fd file descriptor to be read (socket)
 /// \param toPrint flag to print file to stdout
-///
-/// \returns void
 void get_file(int fd, int toPrint);
 
 /// Set a given signal to be handled by handler function.
 ///
 /// \param signum signal number
-///
 static void handler(int signum);
+
+/// Set a given signal to be handled by handler_tcp function.
+///
+/// \param signum signal number
+static void handler_tcp(int signum);
 
 /// Function to clear stdin.
 ///
